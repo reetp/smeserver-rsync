@@ -1,7 +1,7 @@
 #!/usr/bin/perl -wT
 
 #----------------------------------------------------------------------
-# heading     : dungog.net
+# heading     : Administration
 # description : Rsync
 # navigation  : 4000 4863
 #
@@ -337,7 +337,7 @@ sub showInitial ($$)
     print '</table>';
 
     #configure and select set
-    print $q->h4 ('Transfer Sets Summary - Anonymous [untested on sme7]');
+    print $q->h4 ('Transfer Sets Summary - Anonymous [untested]');
 
     print $q->p ($q->a ({href => $q->url (-absolute => 1) . "?state=showAnon&&rsync=new"},
                    'Click here'),
@@ -412,14 +412,17 @@ sub showInitial ($$)
     print '</table>';
 
     #configure and select set
-    print $q->h4 ('Configure your server as an Anonymous Rsync server - [untested on sme7]');
+    print $q->h4 ('Configure your server as an Anonymous Rsync server - Not tested');
 
     #check to see if e-smith-rsyncd is installed
-    unless ( -e "/etc/e-smith/events/actions/conf-rsyncd" )
+#    unless ( -e "/etc/e-smith/events/actions/conf-rsyncd" )
+    my $rsyncd_status = db_get_prop(\%conf, "rsyncd", "status") || 'disabled';
+    unless ($rsyncd_status eq 'enabled')
+
     {
-      print $q->p (esmith::cgi::genSmallCell ($q, 'NOTE: to make files available for download by
+      print $q->p (esmith::cgi::genSmallCell ($q, 'NOTE: Not currently working. To make files available for download by
               Anonymous Rsync to you need to install
-              e-smith-rsyncd-0.0.2, see help below'));
+              smeserver-shared-folders, see help below'));
     }
     else
     {
@@ -521,7 +524,7 @@ sub modifyRsync ($$)
         }
 
         print $q->Tr ($q->td ("<input type=\"checkbox\" name=\"delete\" $tick>"),
-		      esmith::cgi::genTextRow ($q, ('Delete files that don´t exist on the sending side, Always test first.')));
+		      esmith::cgi::genTextRow ($q, ('Delete files that do not exist on the sending side. <font color="red">Always use Testing option first.</font>')));
 
         my $compress = db_get_prop(\%dungog, $rsync, "compress") || 'no';
         $tick = '';
@@ -532,7 +535,7 @@ sub modifyRsync ($$)
 
         print $q->Tr ($q->br);
         print $q->Tr ($q->td ("<input type=\"checkbox\" name=\"compress\" $tick>"),
-		      esmith::cgi::genTextRow ($q, ('compress file data, This option is useful on slow links.')));
+		      esmith::cgi::genTextRow ($q, ('Compress file data. This option is useful on slow links.')));
 
         my $mail = db_get_prop(\%dungog, $rsync, "mail") || '';
         $tick = '';
@@ -543,7 +546,7 @@ sub modifyRsync ($$)
 
         print $q->Tr ($q->br);
         print $q->Tr ($q->td ("<input type=\"checkbox\" name=\"mail\" $tick>"),
-		      esmith::cgi::genTextRow ($q, ('if automating, email any output to admin.')));
+		      esmith::cgi::genTextRow ($q, ('If automating, email any output to admin.')));
 
         my $dbdump = db_get_prop(\%dungog, $rsync, "dbdump") || '';
         $tick = '';
@@ -554,10 +557,10 @@ sub modifyRsync ($$)
 
         print $q->Tr ($q->br);
         print $q->Tr ($q->td ("<input type=\"checkbox\" name=\"dbdump\" $tick>"),
-		      esmith::cgi::genTextRow ($q, ('to include mysql tables in your transfer,
+		      esmith::cgi::genTextRow ($q, ('Include mysql tables in your transfer -
 		      requires you to send the dir /home/e-smith/db/mysql or a parent dir.')));
 
-        print $q->p (esmith::cgi::genWidgetRow ($q, "limit I/O bandwidth, KBytes per second",
+        print $q->p (esmith::cgi::genWidgetRow ($q, "Limit I/O bandwidth, KBytes per second",
                       $q->popup_menu (-name    => 'bwlimit',
                            -values  => ['none','10','25','50','100','500','1000','2000','4000','6000','10000','20000'],
                            -default => db_get_prop(\%dungog, $rsync, "bwlimit") || 'none',
@@ -569,8 +572,8 @@ sub modifyRsync ($$)
                                     to exclude or include directories or files from this rsync job, 
                                     see help below. If either file exists the options are added into the script below after a panel save.")),
 
-        esmith::cgi::genTextRow ($q,  ('To run a command or shell script, before or after the
-                                   rsync job enter the command below, leave blank for no command.')),
+        esmith::cgi::genTextRow ($q,  ('To run a command or shell script before or after the
+                                   rsync job enter the command below. Leave blank for no command.')),
 
         esmith::cgi::genNameValueRow ($q,
                       "Pre rsync command, eg, /usr/bin/moveaway",
@@ -593,7 +596,7 @@ sub modifyRsync ($$)
                         esmith::cgi::genSmallCell ($q,
                         $q->a ({href => $q->url (-absolute => 1)
                                  . "?state=modifyrsync&&rsync=$rsync&&editlocaldir="
-                                 . $_}, 'copy&Edit...')),
+                                 . $_}, 'Copy & Edit... ')),
                         esmith::cgi::genSmallCell ($q,
                         $q->a ({href => $q->url (-absolute => 1)
                                  . "?state=deleteitem&&type=localdir&&rsync=$rsync&&item="
@@ -608,7 +611,7 @@ sub modifyRsync ($$)
                       "$editlocaldir",),
 
         #remote servers
-        esmith::cgi::genTextRow ($q, $q->p ('<b>Remote user@server</b> user is required, can be different to local user')));
+        esmith::cgi::genTextRow ($q, $q->p ('<b>Remote user@server</b> user is required. Can be different to local user')));
 
         print $q->table ({border => 1, cellspacing => 1, cellpadding => 4});
         foreach (sort @remoteserverlist)
@@ -617,7 +620,7 @@ sub modifyRsync ($$)
                         esmith::cgi::genSmallCell ($q,
                         $q->a ({href => $q->url (-absolute => 1)
                                  . "?state=modifyrsync&&rsync=$rsync&&editremoteserver="
-                                 . $_}, 'copy&Edit...')),
+                                 . $_}, 'Copy & Edit... ')),
                         esmith::cgi::genSmallCell ($q,
                         $q->a ({href => $q->url (-absolute => 1)
                                  . "?state=deleteitem&&type=remoteserver&&rsync=$rsync&&item="
@@ -641,7 +644,7 @@ sub modifyRsync ($$)
                         esmith::cgi::genSmallCell ($q,
                         $q->a ({href => $q->url (-absolute => 1)
                                  . "?state=modifyrsync&&rsync=$rsync&&editremotedir="
-                                 . $_}, 'copy&Edit...')),
+                                 . $_}, 'Copy & Edit... ')),
                         esmith::cgi::genSmallCell ($q,
                         $q->a ({href => $q->url (-absolute => 1)
                                  . "?state=deleteitem&&type=remotedir&&rsync=$rsync&&item="
@@ -893,7 +896,7 @@ sub showAnon ($$)
 
         print $q->Tr ($q->br);
         print $q->Tr ($q->td ("<input type=\"checkbox\" name=\"compress\" $tick>"),
-		      esmith::cgi::genTextRow ($q, ('compress file data, This option is useful on slow links.')));
+		      esmith::cgi::genTextRow ($q, ('Compress file data, This option is useful on slow links.')));
 
 
         my $mail = db_get_prop(\%dungog, $rsync, "mail") || '';
@@ -905,7 +908,7 @@ sub showAnon ($$)
 
         print $q->Tr ($q->br);
         print $q->Tr ($q->td ("<input type=\"checkbox\" name=\"mail\" $tick>"),
-		      esmith::cgi::genTextRow ($q, ('if automating, email any output to admin.')));
+		      esmith::cgi::genTextRow ($q, ('If automating, email any output to admin.')));
 
         print $q->p (esmith::cgi::genWidgetRow ($q, "limit I/O bandwidth, KBytes per second",
                       $q->popup_menu (-name    => 'bwlimit',
@@ -922,7 +925,7 @@ sub showAnon ($$)
                                it will be in the form domain.dom::directory')));
 
         print $q->Tr (esmith::cgi::genNameValueRow ($q,
-                      "remote server and directory",
+                      "Remote server and directory",
                       "remoteserver",
                       db_get_prop(\%dungog, $rsync, "remoteserver") || '',));
 
@@ -931,7 +934,7 @@ sub showAnon ($$)
                                eg. /home/e-smith/files/ibays/anibay/files/data')));
         #local directory
         print $q->Tr (esmith::cgi::genNameValueRow ($q,
-                      "local directory",
+                      "Local directory",
                       "localdir",
                       db_get_prop(\%dungog, $rsync, "localdir") || '',));
 
@@ -1151,10 +1154,9 @@ sub showIbay ($$)
 
       unless ( -e '/etc/e-smith/templates/etc/hosts.allow/rsync')
       {
-          print $q->p ($q->p ('To allow external access to your files install.<br>
-                               e-smith-rsyncd-0.0.2-01 for 5.6 & above<br>
-                               Charlie Brady prepared these rpms which are also available
-                               at dungog.net/sme/files. Thanks Charlie ! '));
+          print $q->p ($q->p ('This is not fully functioning currentlyl.<br>
+                               It require smeserver-shared-folders to enable rsyncd<br>
+                               Work still required '));
       }
 
       print $q->p ($q->a ({href => $q->url (-absolute => 1) . "?state=recentRsync"},
@@ -1171,6 +1173,8 @@ sub showIbay ($$)
       my $ibay = '';
       foreach $ibay (sort @ibayAccounts)
       {
+	unless ($ibay eq 'Primary')
+	{
           my $name = db_get_prop(\%accounts, "$ibay", 'Name') || '';
           my $PublicAccess = db_get_prop(\%accounts, "$ibay", "PublicAccess") || '';
           my $Group = db_get_prop(\%accounts, "$ibay", "Group") || '';
@@ -1206,6 +1210,7 @@ sub showIbay ($$)
                                         . "?state=modifyibay&&PublicAccess=local&ibay="
                                         . $ibay}, 'Modify...')));
           }
+        }
       }
       print '</table>';
     }
@@ -1571,27 +1576,27 @@ set the port for any server with the following commands
 run this once
 # /sbin/e-smith/db dungog set remoteport setting
 
-then for each server
-# /sbin/e-smith/db dungog setprop remoteport mail.server2.com 2211
+then for each server add a matching server entry
+# /sbin/e-smith/db dungog setprop remoteport root@mail.server2.com 2211
 
 verify
 # /sbin/e-smith/db dungog show remoteport
   remoteport=setting
-     mail.server2.com=2211
-     www.server3.com=2212
+     root@mail.server2.com=2211
+     root@www.server3.com=2212
 
 <a name="3"><h3>Rsync Anonymous server TODO</h3></a>
+Highly experimental - do not use
+
+This used to require e-smith-rsyncd but you can now get rsyncd
+functionality via the smeserver-shared-folders contrib
+
 To make files available for download by Anonymous Rsync you place them
 in the files directory of an ibay and make it globally accesable.
 The panel shows which servers have the correct settings and warns of
 possible errors in permissions. It has an option to enable or disable
 anonymous rsync access.
 
-You need to install e-smith-rsyncd 
-
-e-smith-rsyncd was built by Charlie Brady and is GPL
-part of dungog-rsync acts as a wrapper around e-smith-rsyncd to make
-it easier to use and to see what is being made available
 
 <a name="4"><h3>Rsync Anonymous client</h3></a>
 
@@ -1608,14 +1613,14 @@ Note. the exlude file is matched first
 From man rsync
 
  --exclude-from=FILE
-        This option allows you to selectively exclude  cer­
-        tain  files  from  the  list  of files to be trans­
+        This option allows you to selectively exclude  cer-
+        tain  files  from  the  list  of files to be trans-
         ferred. This is most useful in combination  with  a
         recursive transfer.
 
         This option adds all exclude patterns listed in the
         file FILE to the exclude list.  Blank lines in FILE
-        and lines starting with ´;´ or ´#´ are ignored.  If
+        and lines starting with ";" or "#" are ignored.  If
         FILE is - the  list  will  be  read  from  standard
         input.
 
@@ -1625,7 +1630,7 @@ EXCLUDE PATTERNS
        which files to skip.
 
        rsync builds an ordered list of include/exclude options as
-       specified  on the command line. When a filename is encoun­
+       specified  on the command line. When a filename is encoun-
        tered, rsync checks the name against each  exclude/include
        pattern  in  turn. The first matching pattern is acted on.
        If it is an exclude pattern, then that file is skipped. If
@@ -1662,10 +1667,10 @@ EXCLUDE PATTERNS
               all wildcards in the pattern  will  match  slashes,
               otherwise they will stop at slashes.
 
-       o      if  the pattern contains a / (not counting a trail­
-              ing /) then it is matched against  the  full  file­
-              name,  including any leading directory. If the pat­
-              tern doesn´t contain a / then it  is  matched  only
+       o      if  the pattern contains a / (not counting a trail-
+              ing /) then it is matched against  the  full  file-
+              name,  including any leading directory. If the pat-
+              tern doesn\´t contain a / then it  is  matched  only
               against   the  final  component  of  the  filename.
               Again,  remember  that  the  algorithm  is  applied
               recursively  so "full filename" can actually be any
@@ -1689,12 +1694,12 @@ EXCLUDE PATTERNS
        you  to  have  a  single  exclude  list that contains both
        include and exclude options.
 
-       If you end an exclude list with --exclude ´*´,  note  that
+       If you end an exclude list with --exclude "*",  note  that
        since the algorithm is applied recursively that unless you
        explicitly include parent directories of files you want to
-       include  then the algorithm will stop at the parent direc­
+       include  then the algorithm will stop at the parent direc
        tories and never see the files below them.  To include all
-       directories,  use --include ´*/´ before the --exclude ´*´.
+       directories,  use --include "*/" before the --exclude "*".
 
        Here are some exclude/include examples:
 
@@ -1712,7 +1717,7 @@ EXCLUDE PATTERNS
               foo
 
        o      /foo/**/bar  would  exclude  any  file
-              called bar two or more levels below a  base  direc­
+              called bar two or more levels below a  base  direc-
               tory called foo
 
        o      */
@@ -1722,7 +1727,7 @@ EXCLUDE PATTERNS
 
        o      foo/
               foo/bar.c
-              *  would  include only foo/bar.c (the foo/ direc­
+              *  would  include only foo/bar.c (the foo/ direc-
               tory must be explicitly included  or  it  would  be
               excluded by the "*")
 
