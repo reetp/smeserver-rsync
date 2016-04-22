@@ -144,7 +144,7 @@ die "rsync argument missing." unless defined ($rsync);
   print RUN "    echo 'Begin rsync transfer.'\n";
   print RUN "\n";
 
-  #senddirs','sendservers','recievedirs','recieveservers
+  #senddirs','sendservers','receivedirs','receiveservers
   if ($method eq 'senddirs')
   {
     foreach (sort @localdirlist)
@@ -172,29 +172,29 @@ die "rsync argument missing." unless defined ($rsync);
       print RUN "\n";
     }
   }
-  elsif ($method eq 'recievedirs')
+  elsif ($method eq 'receivedirs')
   {
     foreach (sort @remotedirlist)
     {
       my $remoteport  = db_get_prop(\%dungog, "remoteport", $remoteserver) || '22';
 
-      # this server recieves [dirs from servers]\n";
+      # this server receives [dirs from servers]\n";
       print RUN "    echo ''\n";
-      print RUN "    echo 'Recieving $_ from $remoteserver.'\n";
+      print RUN "    echo 'Receiving $_ from $remoteserver.'\n";
       print RUN "    /usr/bin/rsync $OPTS  -e \"ssh -p $remoteport\" $remoteserver:$_ $localdir\n";
       print RUN "\n";
     }
 
   }
-  elsif ($method eq 'recieveservers')
+  elsif ($method eq 'receiveservers')
   {
     foreach (sort @remoteserverlist)
     {
       my $remoteport  = db_get_prop(\%dungog, "remoteport", $_) || '22';
 
-      # this server recieves [one dir from servers]\n";
+      # this server receives [one dir from servers]\n";
       print RUN "    echo ''\n";
-      print RUN "    echo 'Recieving $remotedir from $_.'\n";
+      print RUN "    echo 'Receiving $remotedir from $_.'\n";
       print RUN "    /usr/bin/rsync $OPTS -e \"ssh -p $remoteport\" $_:$remotedir $localdir\$_\n";
       print RUN "\n";
     }
