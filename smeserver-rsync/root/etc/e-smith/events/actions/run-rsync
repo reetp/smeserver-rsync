@@ -1,0 +1,31 @@
+#!/usr/bin/perl -w
+
+#----------------------------------------------------------------------
+# Author Stephen Noble <stephen@dungog.net>
+# create run rsync scripts for dungog-rsync
+#----------------------------------------------------------------------
+
+package esmith;
+
+#use strict;
+#use Errno;
+use esmith::config;
+use esmith::util;
+use esmith::db;
+
+my %conf;
+tie %conf, 'esmith::config';
+
+#local %dungog;
+#tie %dungog, 'esmith::config', '/home/e-smith/db/dungog';
+
+my $event = $ARGV [0];
+my $rsync = $ARGV [1];
+my $user  = $ARGV [2];
+die "rsync argument missing." unless defined ($rsync);
+die "user argument missing." unless defined ($user);
+
+      system("/bin/su -c /usr/bin/dungogrsync-$rsync $user 2> /var/log/dungogrsyncnow 1> /var/log/dungogrsyncnow") == 0
+        or die ("Error occurred while running rsync.\n");
+
+exit (0)

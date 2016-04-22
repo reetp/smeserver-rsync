@@ -1,0 +1,86 @@
+#!/usr/bin/perl -w
+
+#----------------------------------------------------------------------
+# Author Stephen Noble <stephen@dungog.net>
+# create rsync scripts for dungog-rsync
+#----------------------------------------------------------------------
+
+package esmith;
+
+use esmith::config;
+use esmith::util;
+use esmith::db;
+
+my %conf;
+tie %conf, 'esmith::config';
+
+local %dungog;
+tie %dungog, 'esmith::config', '/home/e-smith/db/dungog';
+
+my $rsync = $ARGV [1];
+die "rsync argument missing." unless defined ($rsync);
+
+  unlink ("/usr/bin/dungogrsync-$rsync");
+
+  #define some variables
+  my $method            = db_get_prop(\%dungog, $rsync, "method")  || '';
+  my $options           = db_get_prop(\%dungog, $rsync, "options") || '';
+  my $compress          = db_get_prop(\%dungog, $rsync, "compress")|| '';
+
+  my $localdir          = db_get_prop(\%dungog, $rsync, "localdir")     || 'none';
+  my $remoteserver      = db_get_prop(\%dungog, $rsync, "remoteserver") || 'none';
+
+  my $OPTS              = '$OPTS';
+  my $VAR               = '$VAR';
+  my $C                 = '';
+  my $D                 = '';
+
+  #create rsync set script /usr/bin/dungogrsync-$rsync
+  open (RUN, ">/usr/bin/dungogrsync-$rsync") || die ("Can't open /usr/bin/dungogrsync-$rsync: $!");
+
+  # can run from cron on a MITELsme server
+  # typical use, mirrors an ibay from the source server
+
+  print RUN "#!/bin/bash\n";
+  print RUN "\n";
+  print RUN "# rsync 'driver' script.  (Uses anonymous rsync.)\n";
+  print RUN "\n";
+
+  if ($compress eq 'on')
+  {
+    $C = '--compress';
+  }
+
+  if ($options eq 'test')
+  {
+    print RUN "# For testing.  Only displays what rsync 'would' do and does no actual copying.\n";
+    print RUN "OPTS='-n -vv -u -a $C --stats --progress'\n";
+  }
+  elsif ($options eq 'verbose')
+  {
+    print RUN "# Does copy, but still gives a verbose display of what it is doing.\n";
+    print RUN "OPTS='-v -u -a $C --stats --progress'\n";
+  }
+  elsif ($options eq 'stats')
+  {
+    print RUN "# Does copy, not so verbose.\n";
+    print RUN "OPTS='-u -a $C --stats'\n";
+  }
+  elsif ($options eq 'quiet')
+  {
+    print RUN "# Copies and does no display at all.\n";
+    print RUN "OPTS='-u -a $C --quiet'\n";
+  }
+
+  print RUN "\n";
+  print RUN "  echo 'Begin rsync transfer from $remoteserver to $localdir.'\n";
+  print RUN "\n";
+  print RUN "  /usr/bin/rsync $OPTS $remoteserver $localdir\n";
+  print RUN "\n";
+  print RUN "  echo 'Ending rsync transfer.'\n";
+  print RUN "\n";
+
+  close RUN;
+  chmod 0755, "/usr/bin/dungogrsync-$rsync";
+
+exit (0);

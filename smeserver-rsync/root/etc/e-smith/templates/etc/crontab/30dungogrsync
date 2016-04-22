@@ -1,0 +1,59 @@
+{
+  use esmith::config;
+  use esmith::db;
+
+  local %dungog;
+  tie %dungog, 'esmith::config', '/home/e-smith/db/dungog';
+
+  $OUT = "\n";
+
+  my @all = ();
+  foreach (keys %dungog)
+  {
+    push (@all, $_)
+    if (db_get_type(\%dungog, $_) eq "rsync");
+  }
+  foreach (keys %dungog)
+  {
+    push (@all, $_)
+    if (db_get_type(\%dungog, $_) eq "rsyncAnon");
+  }
+
+  #if a rsync is defined set it up
+  my $all = @all || '0';
+  if ($all > 0)
+  {
+    my $rsync;
+    foreach $rsync (sort @all)
+    {
+      my $user    = db_get_prop(\%dungog, $rsync, "user")    || 'root';
+      my $freq    = db_get_prop(\%dungog, $rsync, "freq")    || '';
+      my $day     = db_get_prop(\%dungog, $rsync, "day")     || 'tue';
+      my $hour    = db_get_prop(\%dungog, $rsync, "hour")    || '3';
+      my $min     = db_get_prop(\%dungog, $rsync, "min")     || '30';
+      my $desc    = db_get_prop(\%dungog, $rsync, "desc")    || '';
+      my $mail    = db_get_prop(\%dungog, $rsync, "mail")    || '';
+
+      #unless email is on, delete output
+      unless ($mail eq 'on')
+      {
+        $mail = '1>/dev/null 2>/dev/null';
+      }
+      else
+      {
+      	$mail = '';
+      }
+
+      if ($freq eq 'hourly')
+      {
+        $OUT .= "# hourly rsync by dungog-rsync.($desc)\n";
+        $OUT .= "$min * * * * $user /usr/bin/dungogrsync-$rsync $mail\n";
+      }
+      elsif ($freq eq 'on')
+      {
+        $OUT .= "# rsync by dungog-rsync.($desc)\n";
+        $OUT .= "$min $hour * * $day $user /usr/bin/dungogrsync-$rsync $mail\n";
+      }
+    }
+  }
+}

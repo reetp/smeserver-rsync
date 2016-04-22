@@ -1,0 +1,1760 @@
+#!/usr/bin/perl -wT
+
+#----------------------------------------------------------------------
+# heading     : dungog.net
+# description : Rsync
+# navigation  : 4000 4863
+#
+# Author Stephen Noble dungog.net
+#
+#----------------------------------------------------------------------
+
+package esmith;
+
+use strict;
+use CGI ':all';
+use CGI::Carp qw(fatalsToBrowser);
+
+use esmith::cgi;
+use esmith::config;
+use esmith::util;
+use esmith::db;
+
+sub showInitial ($$);                       # main form
+sub showHelp ($);
+
+sub modifyRsync ($$);                       # secure form
+sub performModifyRsync ($);                 # secure action
+
+sub showAnon    ($$);                       # anon form
+sub performShowAnon ($);                    # anon action
+
+sub showIbay    ($$);                       # ibay form
+sub performAnon ($);                        # start stop anon rsync
+sub modifyIbay  ($);                        # toggle ibay public access
+
+sub deleteRsync ($);
+sub deleteItem ($);
+
+sub performRsyncNow ($);                    # run backup now
+
+sub rsyncNowResults ($);                    # view logs
+sub recentRsync ($);
+
+BEGIN
+{
+    # Clear PATH and related environment variables so that calls to
+    # external programs do not cause results to be tainted. See
+    # "perlsec" manual page for details.
+
+    $ENV {'PATH'} = '';
+    $ENV {'SHELL'} = '/bin/bash';
+    delete $ENV {'ENV'};
+}
+
+esmith::util::setRealToEffective ();
+
+$CGI::POST_MAX=1024 * 100;  # max 100K posts
+$CGI::DISABLE_UPLOADS = 1;  # no uploads
+
+my %conf;
+tie %conf, 'esmith::config';
+
+my %dungog;
+tie %dungog, 'esmith::config', '/home/e-smith/db/dungog';
+
+my %accounts;
+tie %accounts, 'esmith::config', '/home/e-smith/db/accounts';
+
+my %Labels = ('*' => 'Daily',
+              '1-5' => 'Week days',
+              '0,6' => 'Week ends',
+              'sun'   => 'Sunday',
+              '1'   => 'Monday',
+              '2'   => 'Tuesday',
+              '3'   => 'Wednesday',
+              '4'   => 'Thursday',
+              '5'   => 'Friday',
+              '6'   => 'Saturday');
+
+my %Labels2 = ('senddirs' => 'send one or more directories to another server',
+               'senddirs2self' => 'save directories to self. eg 2nd hardrive',
+               'sendservers' => 'send one directory to many servers',
+               'recievedirs' => 'recieve one or more directories from one server',
+               'recieveservers'  => 'recieve one directory from many servers');
+
+my %Labels5 = ('test'    => 'Test. Only displays what rsync would do and does no actual copying',
+               'verbose' => 'Copies but still gives a verbose display of what it is doing',
+               'stats'   => 'Copies and just displays statistics',
+               'quiet'   => 'Copies and does no display at all');
+
+my %Labels4 = ('none'    => 'no limit',
+              '10'   => '10 kb/s',
+              '25'  => '25 kb/s',
+              '50'  => '50 kb/s',
+              '100' => '100 kb/s',
+              '500' => '500 kb/s',
+              '1000' => '1 mb/s',
+              '2000' => '2 mb/s',
+              '4000' => '4 mb/s',
+              '6000' => '6 mb/s',
+              '10000' => '10 mb/s',
+              '20000' => '20 mb/s');
+
+my %Labels3 = ('*/2' => 'Each 2 hours',
+               '*/4' => 'Each 4 hours',
+               '*/8' => 'Each 8 hours',
+               '*/12' => 'Each 12 hours',
+               '9-17' => '9am-5pm',
+               '8-18' => '8am-6pm',
+               '1'  => '1 am',
+               '2'  => '2 am',
+               '3'  => '3 am',
+               '4'  => '4 am',
+               '5'  => '5 am',
+               '6'  => '6 am',
+               '7'  => '7 am',
+               '8'  => '8 am',
+               '9'  => '9 am',
+               '10' => '10 am',
+               '11' => '11 am',
+               '12' => 'noon',
+               '13' => '1 pm',
+               '14' => '2 pm',
+               '15' => '3 pm',
+               '16' => '4 pm',
+               '17' => '5 pm',
+               '18' => '6 pm',
+               '19' => '7 pm',
+               '20' => '8 pm',
+               '21' => '9 pm',
+               '22' => '10 pm',
+               '23' => '11 pm');
+
+#------------------------------------------------------------
+# examine state parameter and display the appropriate form
+#------------------------------------------------------------
+my $q = new CGI;
+
+if (! grep (/^state$/, $q->param))
+{
+      showInitial ($q, '');
+}
+
+elsif ($q->param ('state') eq "choosesub")
+{
+    if ($q->param ('action') eq "Save Settings")
+    {
+        performModifyRsync ($q);
+    }
+
+    if ($q->param ('action') eq "Save Job")
+    {
+        performShowAnon ($q);
+    }
+
+    elsif ($q->param ('action') eq "Run this rsync job now")
+    {
+        performRsyncNow ($q);
+    }
+}
+
+elsif ($q->param ('state') eq "help")
+{
+    showHelp ($q);
+}
+
+#secure form
+elsif ($q->param ('state') eq "modifyrsync")
+{
+    modifyRsync ($q, '');
+}
+elsif ($q->param ('state') eq "performmodify")
+{
+    performModifyRsync ($q);
+}
+
+#tasks
+elsif ($q->param ('state') eq "deletersync")
+{
+    deleteRsync ($q);
+}
+elsif ($q->param ('state') eq "deleteitem")
+{
+    deleteItem ($q);
+}
+#show results
+elsif ($q->param ('state') eq "rsyncNowResults")
+{
+    rsyncNowResults ($q);
+}
+elsif ($q->param ('state') eq "recentRsync")
+{
+    recentRsync ($q);
+}
+
+#ibay setup form
+elsif ($q->param ('state') eq "showibay")
+{
+    showIbay ($q, '');
+}
+elsif ($q->param ('state') eq "performAnon")
+{
+    performAnon ($q);
+}
+elsif ($q->param ('state') eq "modifyibay")
+{
+    modifyIbay ($q);
+}
+
+#anon form
+elsif ($q->param ('state') eq "showAnon")
+{
+    showAnon ($q, '');
+}
+elsif ($q->param ('state') eq "performShowAnon")
+{
+    performShowAnon ($q);
+}
+
+else
+{
+    esmith::cgi::genStateError ($q, \%conf);
+}
+
+exit (0);
+
+#########################################################################
+sub showInitial ($$)
+{
+    my ($q, $msg) = @_;
+
+    if ($msg eq '')
+    {
+          esmith::cgi::genHeaderNonCacheable
+            ($q, \%conf, 'Rsync file transfer');
+    }
+    else
+    {
+        esmith::cgi::genHeaderNonCacheable
+            ($q, \%conf, 'Rsync file transfer');
+
+        print $q->h4 ('Operation status report');
+        print $q->p ($msg);
+        print $q->hr;
+    }
+
+    print $q->startform (-method => 'POST', -action => $q->url (-absolute => 1));
+
+    #short intro
+    print $q->Tr (esmith::cgi::genTextRow ($q, $q->p ('Automatically mirror your data to another server.
+                     Use either secure rsync using ssh keys, or anonymous rsync.
+                     Transfers have been scheduled for sets highlighted in red.
+                     You also have a transfer now option for each set')));
+
+    #check to see if cron is running
+    unless ( -e "/var/run/crond.pid" )
+    {
+      print $q->p (esmith::cgi::genSmallRedCell ($q, "NOTE: cron is not ".
+              "running. It really should be, besides not automating our backups, lots of system tasks are not ".
+              "performed. As root, on the command line, type 'service crond start' then 'ps -A' to check."));
+    }
+
+    #configure and select set
+    print $q->h4 ('Transfer Sets Summary - Secure');
+
+    print $q->p ($q->a ({href => $q->url (-absolute => 1) . "?state=modifyrsync&&rsync=new"},
+                    'Click here'),
+                    'to add a transfer set.');
+
+    print "<table border=1 cellspacing=1 cellpadding=4>";
+
+    #header
+    print $q->Tr (esmith::cgi::genSmallCell ($q, $q->b ('Description')),
+                  esmith::cgi::genSmallCell ($q, $q->b ('Frequency')),
+                  esmith::cgi::genSmallCell ($q, $q->b ('Time')),
+                  $q->td ('&nbsp;'),
+                  $q->td ('&nbsp;'));
+
+    #get rsyncs/shares
+    my @rsyncs = ();
+    foreach (sort keys %dungog)
+    {
+        push (@rsyncs, $_)
+        if (db_get_type(\%dungog, $_) eq "rsync");
+    }
+
+    my $rsync = '';
+    foreach $rsync (sort @rsyncs)
+    {
+        my $desc    = db_get_prop(\%dungog, $rsync, "desc")    || '';
+        my $freq    = db_get_prop(\%dungog, $rsync, "freq")    || '';
+        my $day     = db_get_prop(\%dungog, $rsync, "day")     || '';
+        my $hour    = db_get_prop(\%dungog, $rsync, "hour")    || '';
+        my $min     = db_get_prop(\%dungog, $rsync, "min")     || '';
+
+        #modify frequency value for display
+        my $daylabel = ($Labels{$day});
+        if ($freq eq 'hourly')
+        {
+          $hour = '*';
+        }
+        elsif ($freq eq 'on')
+        {
+          $freq = $daylabel;
+        }
+
+        if ($freq eq 'off')
+        {
+          print $q->Tr (esmith::cgi::genSmallCell ($q, $desc),
+                        esmith::cgi::genSmallCell ($q, $freq),
+                        esmith::cgi::genSmallCell ($q, ''),
+                        esmith::cgi::genSmallCell ($q,
+                        $q->a ({href => $q->url (-absolute => 1)
+                                 . "?state=modifyrsync&&rsync="
+                                 . $rsync}, 'Modify/Run...')),
+                        esmith::cgi::genSmallCell ($q,
+                        $q->a ({href => $q->url (-absolute => 1)
+                                 . "?state=deletersync&&rsync="
+                                       . $rsync}, 'Remove...')));
+        }
+        else
+        {
+          print $q->Tr (esmith::cgi::genSmallCell ($q, $desc),
+                      esmith::cgi::genSmallRedCell ($q, $freq),
+                      esmith::cgi::genSmallRedCell ($q, $hour.':'.$min),
+                      esmith::cgi::genSmallCell ($q,
+                      $q->a ({href => $q->url (-absolute => 1)
+                                 . "?state=modifyrsync&&rsync="
+                                 . $rsync}, 'Modify/Run...')),
+                      esmith::cgi::genSmallCell ($q,
+                      $q->a ({href => $q->url (-absolute => 1)
+                                 . "?state=deletersync&&rsync="
+                                 . $rsync}, 'Remove...')));
+        }
+    }
+
+    print '</table>';
+
+    #configure and select set
+    print $q->h4 ('Transfer Sets Summary - Anonymous [untested on sme7]');
+
+    print $q->p ($q->a ({href => $q->url (-absolute => 1) . "?state=showAnon&&rsync=new"},
+                   'Click here'),
+                   'to add a transfer set.');
+
+    print "<table border=1 cellspacing=1 cellpadding=4>";
+
+    #header
+    print $q->Tr (esmith::cgi::genSmallCell ($q, $q->b ('Description')),
+                esmith::cgi::genSmallCell ($q, $q->b ('Frequency')),
+                esmith::cgi::genSmallCell ($q, $q->b ('Time')),
+                $q->td ('&nbsp;'),
+                $q->td ('&nbsp;'));
+
+    #get rsyncs/shares
+    my @rsyncAnon = ();
+    foreach (sort keys %dungog)
+    {
+      push (@rsyncAnon, $_)
+      if (db_get_type(\%dungog, $_) eq "rsyncAnon");
+    }
+
+    $rsync = '';
+    foreach $rsync (sort @rsyncAnon)
+    {
+      my $desc    = db_get_prop(\%dungog, $rsync, "desc")    || '';
+      my $freq    = db_get_prop(\%dungog, $rsync, "freq")    || '';
+      my $day     = db_get_prop(\%dungog, $rsync, "day")     || '';
+      my $hour    = db_get_prop(\%dungog, $rsync, "hour")    || '';
+      my $min     = db_get_prop(\%dungog, $rsync, "min")     || '';
+
+      #modify frequency value for display
+      my $daylabel = ($Labels{$day});
+      if ($freq eq 'hourly')
+      {
+        $hour = '*';
+      }
+      elsif ($freq eq 'on')
+      {
+        $freq = $daylabel;
+      }
+
+      if ($freq eq 'off')
+      {
+        print $q->Tr (esmith::cgi::genSmallCell ($q, $desc),
+                      esmith::cgi::genSmallCell ($q, $freq),
+                      esmith::cgi::genSmallCell ($q, ''),
+                      esmith::cgi::genSmallCell ($q,
+                      $q->a ({href => $q->url (-absolute => 1)
+                               . "?state=showAnon&&rsync="
+                               . $rsync}, 'Modify/Run...')),
+                      esmith::cgi::genSmallCell ($q,
+                      $q->a ({href => $q->url (-absolute => 1)
+                               . "?state=deletersync&&rsync="
+                                     . $rsync}, 'Remove...')));
+      }
+      else
+      {
+        print $q->Tr (esmith::cgi::genSmallCell ($q, $desc),
+                    esmith::cgi::genSmallRedCell ($q, $freq),
+                    esmith::cgi::genSmallRedCell ($q, $hour.':'.$min),
+                    esmith::cgi::genSmallCell ($q,
+                    $q->a ({href => $q->url (-absolute => 1)
+                               . "?state=showAnon&&rsync="
+                               . $rsync}, 'Modify/Run...')),
+                    esmith::cgi::genSmallCell ($q,
+                    $q->a ({href => $q->url (-absolute => 1)
+                               . "?state=deletersync&&rsync="
+                               . $rsync}, 'Remove...')));
+      }
+    }
+    print '</table>';
+
+    #configure and select set
+    print $q->h4 ('Configure your server as an Anonymous Rsync server - [untested on sme7]');
+
+    #check to see if e-smith-rsyncd is installed
+    unless ( -e "/etc/e-smith/events/actions/conf-rsyncd" )
+    {
+      print $q->p (esmith::cgi::genSmallCell ($q, 'NOTE: to make files available for download by
+              Anonymous Rsync to you need to install
+              e-smith-rsyncd-0.0.2, see help below'));
+    }
+    else
+    {
+      print $q->p ($q->a ({href => $q->url (-absolute => 1) . "?state=showibay"},
+                'Click here'),
+                'to view which ibays are setup to allow anonymous rsync
+                downloads. You can also enable or disable anonymous rsync to your server');
+    }
+
+    print $q->endform;
+    print $q->p ($q->hr, $q->font ({size => "-1"}, "Copyright dungog.net",
+          $q->a ({href => $q->url (-absolute => 1) . "?state=help"}, 'Rsync help'), " ..."));
+
+    print '</FONT>';
+    print '</DIV>';
+    print $q->end_html;
+}
+
+#    -------------********* secure Sets ***********---------------------------
+
+sub modifyRsync ($$)
+{
+    my ($q, $msg) = @_;
+    my $rsync = $q->param ('rsync') ||'';
+    my $editlocaldir     = $q->param ('editlocaldir')     ||'';
+    my $editremoteserver = $q->param ('editremoteserver') ||'';
+    my $editremotedir    = $q->param ('editremotedir')    ||'';
+
+    if ($msg eq '')
+    {
+          esmith::cgi::genHeaderNonCacheable
+            ($q, \%conf, 'Modify the selected rsync job.');
+    }
+    else
+    {
+          esmith::cgi::genHeaderNonCacheable
+            ($q, \%conf, 'Modify the selected rsync job.');
+
+        print $q->p ($msg);
+        print $q->hr;
+    }
+
+    if ($rsync eq 'new')
+    {
+       my $random = int(rand(999999));
+       $rsync = 'rsync'.$random;
+    }
+
+    # find system users
+    my @userlist = ('');
+    foreach (keys %accounts)
+    {
+       push (@userlist, $_)
+           if (db_get_type(\%accounts, $_) eq 'user');
+    }
+
+    my $localdirlist = db_get_prop(\%dungog, "$rsync", "localdirlist") || 'none';
+    my @localdirlist = split(/,/, $localdirlist);
+    my $remoteserverlist = db_get_prop(\%dungog, "$rsync", "remoteserverlist") || 'none';
+    my @remoteserverlist = split(/,/, $remoteserverlist);
+    my $remotedirlist = db_get_prop(\%dungog, "$rsync", "remotedirlist") || 'none';
+    my @remotedirlist = split(/,/, $remotedirlist);
+
+    print $q->startform (-method => 'POST', -action => $q->url (-absolute => 1));
+
+    print $q->table ({border => 0, cellspacing => 0, cellpadding => 4},
+
+        esmith::cgi::genTextRow ($q, $q->p ($q->a ({href => $q->url (-absolute => 1) . "?state=help"},
+                'Please review'),
+           "the help page for explanations and suggestions on how to setup.")),
+
+        esmith::cgi::genNameValueRow ($q,
+                      "Description",
+                      "desc",
+                      db_get_prop(\%dungog, $rsync, "desc") || '',),
+
+        esmith::cgi::genWidgetRow ($q, "Select a user for rsync to run as",
+               $q->popup_menu (-name    => "user",
+                               -values  => [ sort @userlist , 'root' ],
+                               -default => db_get_prop(\%dungog, $rsync, "user") || '')),
+
+        esmith::cgi::genWidgetRow ($q, "Method",
+               $q->popup_menu (-name    => "method",
+                               -values  => ['senddirs','sendservers','recievedirs','recieveservers','senddirs2self'],
+                               -default => db_get_prop(\%dungog, $rsync, "method") || '',
+                               -labels => \%Labels2)),
+
+        esmith::cgi::genWidgetRow ($q, "Options",
+               $q->popup_menu (-name    => "options",
+                               -values  => ['test','verbose','stats','quiet'],
+                               -default => db_get_prop(\%dungog, $rsync, "options") || 'stats',
+                               -labels => \%Labels5)));
+
+        my $delete = db_get_prop(\%dungog, $rsync, "delete") || 'no';
+        my $tick = '';
+	      if ($delete eq 'on')
+        {
+          $tick = "checked";
+        }
+
+        print $q->Tr ($q->td ("<input type=\"checkbox\" name=\"delete\" $tick>"),
+		      esmith::cgi::genTextRow ($q, ('Delete files that don´t exist on the sending side, Always test first.')));
+
+        my $compress = db_get_prop(\%dungog, $rsync, "compress") || 'no';
+        $tick = '';
+	      if ($compress eq 'on')
+        {
+          $tick = "checked";
+        }
+
+        print $q->Tr ($q->br);
+        print $q->Tr ($q->td ("<input type=\"checkbox\" name=\"compress\" $tick>"),
+		      esmith::cgi::genTextRow ($q, ('compress file data, This option is useful on slow links.')));
+
+        my $mail = db_get_prop(\%dungog, $rsync, "mail") || '';
+        $tick = '';
+	      if ($mail eq 'on')
+        {
+          $tick = "checked";
+        }
+
+        print $q->Tr ($q->br);
+        print $q->Tr ($q->td ("<input type=\"checkbox\" name=\"mail\" $tick>"),
+		      esmith::cgi::genTextRow ($q, ('if automating, email any output to admin.')));
+
+        my $dbdump = db_get_prop(\%dungog, $rsync, "dbdump") || '';
+        $tick = '';
+	      if ($dbdump eq 'on')
+        {
+          $tick = "checked";
+        }
+
+        print $q->Tr ($q->br);
+        print $q->Tr ($q->td ("<input type=\"checkbox\" name=\"dbdump\" $tick>"),
+		      esmith::cgi::genTextRow ($q, ('to include mysql tables in your transfer,
+		      requires you to send the dir /home/e-smith/db/mysql or a parent dir.')));
+
+        print $q->p (esmith::cgi::genWidgetRow ($q, "limit I/O bandwidth, KBytes per second",
+                      $q->popup_menu (-name    => 'bwlimit',
+                           -values  => ['none','10','25','50','100','500','1000','2000','4000','6000','10000','20000'],
+                           -default => db_get_prop(\%dungog, $rsync, "bwlimit") || 'none',
+                           -labels => \%Labels4)));
+
+        print $q->table ({border => 0, cellspacing => 0, cellpadding => 4},
+
+        esmith::cgi::genTextRow ($q,  ("Create /opt/$rsync.ex and/or /opt/$rsync.in 
+                                    to exclude or include directories or files from this rsync job, 
+                                    see help below. If either file exists the options are added into the script below after a panel save.")),
+
+        esmith::cgi::genTextRow ($q,  ('To run a command or shell script, before or after the
+                                   rsync job enter the command below, leave blank for no command.')),
+
+        esmith::cgi::genNameValueRow ($q,
+                      "Pre rsync command, eg, /usr/bin/moveaway",
+                      "pre",
+                      db_get_prop(\%dungog, $rsync, "pre") || '',),
+
+        esmith::cgi::genNameValueRow ($q,
+                      "Post rsync command, eg, /usr/bin/moveback",
+                      "post",
+                      db_get_prop(\%dungog, $rsync, "post") || '',),
+
+        esmith::cgi::genTextRow ($q, $q->p ("<b>Local server - $conf{SystemName}.$conf{DomainName}</b>")),
+
+        #local directory
+        esmith::cgi::genTextRow ($q, $q->p ("<b>Local directory</b>")));
+        print "<table border=1 cellspacing=1 cellpadding=4>";
+        foreach (sort @localdirlist)
+        {
+          print $q->Tr (esmith::cgi::genSmallCell ($q, $_),
+                        esmith::cgi::genSmallCell ($q,
+                        $q->a ({href => $q->url (-absolute => 1)
+                                 . "?state=modifyrsync&&rsync=$rsync&&editlocaldir="
+                                 . $_}, 'copy&Edit...')),
+                        esmith::cgi::genSmallCell ($q,
+                        $q->a ({href => $q->url (-absolute => 1)
+                                 . "?state=deleteitem&&type=localdir&&rsync=$rsync&&item="
+                                 . $_}, 'Remove...')));
+        }
+        print '</table>';
+
+        print $q->table ({border => 0, cellspacing => 0, cellpadding => 4},
+        esmith::cgi::genNameValueRow ($q,
+                      "add directory, eg,/home/e-smith/files/ibays/vital",
+                      "localdir",
+                      "$editlocaldir",),
+
+        #remote servers
+        esmith::cgi::genTextRow ($q, $q->p ('<b>Remote user@server</b> user is required, can be different to local user')));
+
+        print $q->table ({border => 1, cellspacing => 1, cellpadding => 4});
+        foreach (sort @remoteserverlist)
+        {
+          print $q->Tr (esmith::cgi::genSmallCell ($q, $_),
+                        esmith::cgi::genSmallCell ($q,
+                        $q->a ({href => $q->url (-absolute => 1)
+                                 . "?state=modifyrsync&&rsync=$rsync&&editremoteserver="
+                                 . $_}, 'copy&Edit...')),
+                        esmith::cgi::genSmallCell ($q,
+                        $q->a ({href => $q->url (-absolute => 1)
+                                 . "?state=deleteitem&&type=remoteserver&&rsync=$rsync&&item="
+                                 . $_}, 'Remove...')));
+        }
+        print '</table>';
+
+        print $q->table ({border => 0, cellspacing => 0, cellpadding => 4},
+        esmith::cgi::genNameValueRow ($q,
+                      "add server",
+                      "remoteserver",
+                      "$editremoteserver",),
+
+        #remote directory
+        esmith::cgi::genTextRow ($q, $q->p ('<b>Remote directory</b>')));
+
+        print $q->table ({border => 1, cellspacing => 1, cellpadding => 4});
+        foreach (sort @remotedirlist)
+        {
+          print $q->Tr (esmith::cgi::genSmallCell ($q, $_),
+                        esmith::cgi::genSmallCell ($q,
+                        $q->a ({href => $q->url (-absolute => 1)
+                                 . "?state=modifyrsync&&rsync=$rsync&&editremotedir="
+                                 . $_}, 'copy&Edit...')),
+                        esmith::cgi::genSmallCell ($q,
+                        $q->a ({href => $q->url (-absolute => 1)
+                                 . "?state=deleteitem&&type=remotedir&&rsync=$rsync&&item="
+                                 . $_}, 'Remove...')));
+        }
+        print '</table>';
+
+        print $q->table ({border => 0, cellspacing => 0, cellpadding => 4},
+        esmith::cgi::genNameValueRow ($q,
+                      "add directory",
+                      "remotedir",
+                      "$editremotedir",));
+
+        #extra table just to align fields better
+        print '</table>';
+        print $q->table ({border => 0, cellspacing => 0, cellpadding => 4},
+
+        #time for automation
+        #esmith::cgi::genTextRow ($q, $q->p ('<b>Timing</b>')),
+
+        esmith::cgi::genTextRow ($q, $q->p ('Select the time and enable to automate<br>
+                                 Alternatively add this job to cron using the Cron panel, the command to give is <br>
+                                 '."/usr/bin/dungogrsync-$rsync")),
+
+        esmith::cgi::genWidgetRow ($q, "Automatic backups",
+                        $q->popup_menu (-name    => 'freq',
+                                        -values  => ['off','on','hourly'] ,
+                                        -default => db_get_prop(\%dungog, $rsync, "freq") || 'off',)),
+
+        esmith::cgi::genWidgetRow ($q, "Backup time, minute",
+                        $q->popup_menu (-name    => 'min',
+                                        -values  => ['1','4','7','10','13','16','19','22','25','28','31','33','36','39','42','45','48','51','54','57','59'] ,
+                                        -default => db_get_prop(\%dungog, $rsync, "min") || '16',)),
+
+        esmith::cgi::genWidgetRow ($q, "Backup time, 24 hour",
+                        $q->popup_menu (-name    => 'hour',
+                                        -values  => ['*/2','*/4','*/8','*/12','8-18','9-17','1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','17','18','19','20','21','22','23'] ,
+                                        -default => db_get_prop(\%dungog, $rsync, "hour") || '3',
+                                        -labels  => \%Labels3)),
+
+        esmith::cgi::genWidgetRow ($q, "Backup time, day of week",
+                        $q->popup_menu (-name    => 'day',
+                                        -values  => ['*','1-5','0,6','sun','1','2','3','4','5','6'] ,
+                                        -default => db_get_prop(\%dungog, $rsync, "day") || '4',
+                                        -labels  => \%Labels)));
+
+    print $q->Tr (esmith::cgi::genButtonRow ($q,
+      $q->submit (-name => 'action', -value => 'Save Settings')));
+
+    print $q->Tr (esmith::cgi::genTextRow ($q, $q->p ('After saving your settings
+                     you can run the backup immediately by clicking below.
+                     You should also save after creating or deleting includes or excludes
+                     or relevant db commands eg override allow')));
+
+    print $q->Tr (esmith::cgi::genButtonRow ($q,
+      $q->submit (-name => 'action', -value => 'Run this rsync job now')));
+
+    if ( -e "/usr/bin/dungogrsync-$rsync" )
+    {
+      print $q->h4 ("Current rsync script file - /usr/bin/dungogrsync-$rsync");
+      print "<table border=1 cellspacing=1 cellpadding=4>";
+
+      print '<font color = "green">';
+      print "<pre>";
+      open (INF,"/usr/bin/dungogrsync-$rsync")
+      or die ("can't open rsync script: $1");
+
+      while (<INF>)
+      {
+          print "$_";
+      }
+
+      close INF;
+      print "</pre>\n";
+    }
+
+    print '</font>';
+    print '<font color = "black">';
+    print $q->hidden (-name => 'state', -override => 1, -default => 'choosesub');
+    print $q->hidden (-name => 'rsync', -override => 1, -default => $rsync);
+
+    print $q->endform;
+    print $q->p ($q->hr, $q->font ({size => "-1"}, "Copyright dungog.net",
+          $q->a ({href => $q->url (-absolute => 1) . "?state=help"}, 'Rsync help'), " ..."));
+
+    print '</FONT>';
+    print '</DIV>';
+    print $q->end_html;
+}
+
+sub performModifyRsync ($)
+{
+    my ($q) = @_;
+    my $rsync        = $q->param ('rsync');
+    my $desc         = $q->param ('desc')        || '';
+    my $method       = $q->param ('method')      || '';
+    my $options      = $q->param ('options')     || '';
+    my $delete       = $q->param ('delete')      || '';
+    my $compress     = $q->param ('compress')    || '';
+    my $mail         = $q->param ('mail')        || '';
+    my $dbdump       = $q->param ('dbdump')      || '';
+    my $pre          = $q->param ('pre')         || '';
+    my $post         = $q->param ('post')        || '';
+    my $user         = $q->param ('user')        || '';
+    my $localdir     = $q->param ('localdir')    || '';
+    my $remoteserver = $q->param ('remoteserver')|| '';
+    my $remotedir    = $q->param ('remotedir')   || '';
+    my $freq         = $q->param ('freq')        || '';
+    my $hour         = $q->param ('hour')        || '';
+    my $min          = $q->param ('min')         || '';
+    my $day          = $q->param ('day')         || '';
+    my $bwlimit      = $q->param ('bwlimit')     || '';
+
+    if ($rsync =~ /^([a-z][\-\_\.a-z0-9]*)$/)
+    {
+        $rsync = $1;
+    }
+
+    #check for invalid characters
+    foreach ($localdir, $remoteserver, $remotedir)
+    {
+      if ($_ =~ /^([\/\-\_\.\ \"\@A-Za-z0-9]*)$/)
+      {
+        $_ = $1;
+      }
+      else
+      {
+        modifyRsync ($q, "Error: You have invalid characters [$_], use only /\-\_\.A-Za-z0-9");
+        return;
+      }
+    }
+
+    #test that non blank entries are directories or files, then add to $localdirlist
+    if ( $localdir ne '' )
+    {
+      my $test = $localdir;
+      $test =~ s/"//g;
+      unless ( -e $test )
+      {
+        modifyRsync ($q, "Error, local server directory or file does not exist. [$test]");
+        return;
+      }
+      else
+      {
+        my $localdirlist = db_get_prop(\%dungog, $rsync, "localdirlist");
+        db_set_prop(\%dungog, $rsync, "localdirlist", "$localdir,$localdirlist");
+      }
+    }
+
+    #add non blank entries  to $remoteserverlist
+    if ( $remoteserver ne '' )
+    {
+      my $remoteserverlist = db_get_prop(\%dungog, $rsync, "remoteserverlist");
+      db_set_prop(\%dungog, $rsync, "remoteserverlist", "$remoteserver,$remoteserverlist");
+    }
+
+    #add non blank entries  to $remotedirlist
+    if ( $remotedir ne '' )
+    {
+      my $remotedirlist = db_get_prop(\%dungog, $rsync, "remotedirlist");
+      db_set_prop(\%dungog, $rsync, "remotedirlist", "$remotedir,$remotedirlist");
+    }
+
+    unless (exists $dungog {$rsync})
+    {
+      db_set(\%dungog, $rsync, 'rsync');
+    }
+    db_set_prop(\%dungog, $rsync, "desc",     $desc);
+    db_set_prop(\%dungog, $rsync, "method",   $method);
+    db_set_prop(\%dungog, $rsync, "options",  $options);
+    db_set_prop(\%dungog, $rsync, "delete",   $delete);
+    db_set_prop(\%dungog, $rsync, "compress", $compress);
+    db_set_prop(\%dungog, $rsync, "user",     $user);
+    db_set_prop(\%dungog, $rsync, "mail",     $mail);
+    db_set_prop(\%dungog, $rsync, "dbdump",   $dbdump);
+    db_set_prop(\%dungog, $rsync, "pre",      $pre);
+    db_set_prop(\%dungog, $rsync, "post",     $post);
+    db_set_prop(\%dungog, $rsync, "freq",     $freq);
+    db_set_prop(\%dungog, $rsync, "day",      $day);
+    db_set_prop(\%dungog, $rsync, "hour",     $hour);
+    db_set_prop(\%dungog, $rsync, "min",      $min);
+    db_set_prop(\%dungog, $rsync, "bwlimit",  $bwlimit);
+
+    system ("/sbin/e-smith/signal-event conf-dungogrsync $rsync") == 0
+        or die ("Error occurred while updating system configuration.\n");
+
+    system ("/sbin/e-smith/expand-template /etc/crontab") == 0
+        or die ("Error occurred expanding crontab.\n");
+
+    modifyRsync ($q, 'settings saved');
+    return;
+
+}
+
+#    -------------********* secure Sets ***********---------------------------
+
+sub showAnon ($$)
+{
+    my ($q, $msg) = @_;
+    my $rsync = $q->param ('rsync') ||'';
+
+    if ($msg eq '')
+    {
+          esmith::cgi::genHeaderNonCacheable
+            ($q, \%conf, 'Modify the selected rsync job.');
+    }
+    else
+    {
+          esmith::cgi::genHeaderNonCacheable
+            ($q, \%conf, 'Modify the selected rsync job.');
+
+        print $q->p ($msg);
+        print $q->hr;
+    }
+
+    if ($rsync eq 'new')
+    {
+       my $random = int(rand(999999));
+       $rsync = 'rsync'.$random;
+    }
+
+    print $q->startform (-method => 'POST', -action => $q->url (-absolute => 1));
+
+    print $q->table ({border => 0, cellspacing => 0, cellpadding => 4},
+
+        esmith::cgi::genTextRow ($q, $q->p ('<b>General</b>')),
+
+        esmith::cgi::genTextRow ($q, $q->p ('This form allow you to mirror a set of files from a remote
+                                             server to your local server, when the remote files are being made
+                                             available with a rsync server.')),
+
+        esmith::cgi::genNameValueRow ($q,
+                      "Description",
+                      "desc",
+                      db_get_prop(\%dungog, $rsync, "desc") || '',),
+
+        esmith::cgi::genWidgetRow ($q, "Options",
+               $q->popup_menu (-name    => "options",
+                               -values  => ['test','verbose','stats','quiet'],
+                               -default => db_get_prop(\%dungog, $rsync, "options") || 'stats',
+                               -labels => \%Labels5)));
+
+        my $compress = db_get_prop(\%dungog, $rsync, "compress") || 'no';
+        my $tick = '';
+	      if ($compress eq 'on')
+        {
+          $tick = "checked";
+        }
+
+        print $q->Tr ($q->br);
+        print $q->Tr ($q->td ("<input type=\"checkbox\" name=\"compress\" $tick>"),
+		      esmith::cgi::genTextRow ($q, ('compress file data, This option is useful on slow links.')));
+
+
+        my $mail = db_get_prop(\%dungog, $rsync, "mail") || '';
+        $tick = '';
+	      if ($mail eq 'on')
+        {
+          $tick = "checked";
+        }
+
+        print $q->Tr ($q->br);
+        print $q->Tr ($q->td ("<input type=\"checkbox\" name=\"mail\" $tick>"),
+		      esmith::cgi::genTextRow ($q, ('if automating, email any output to admin.')));
+
+        print $q->p (esmith::cgi::genWidgetRow ($q, "limit I/O bandwidth, KBytes per second",
+                      $q->popup_menu (-name    => 'bwlimit',
+                           -values  => ['none','1','2.5','5','10','25','50','100','1000'],
+                           -default => db_get_prop(\%dungog, $rsync, "bwlimit") || 'none',
+                           -labels => \%Labels4)));
+
+        print $q->Tr ($q->br);
+
+        print $q->Tr (esmith::cgi::genTextRow ($q, $q->p ('<b>Locations</b>')));
+
+        #remote server
+        print $q->Tr (esmith::cgi::genTextRow ($q, $q->p ('The remote server is the source you will be mirroring,
+                               it will be in the form domain.dom::directory')));
+
+        print $q->Tr (esmith::cgi::genNameValueRow ($q,
+                      "remote server and directory",
+                      "remoteserver",
+                      db_get_prop(\%dungog, $rsync, "remoteserver") || '',));
+
+        print $q->Tr (esmith::cgi::genTextRow ($q, $q->p ('The local directory is the destination for the copy
+                               enter an existing directory on your local server,
+                               eg. /home/e-smith/files/ibays/anibay/files/data')));
+        #local directory
+        print $q->Tr (esmith::cgi::genNameValueRow ($q,
+                      "local directory",
+                      "localdir",
+                      db_get_prop(\%dungog, $rsync, "localdir") || '',));
+
+        #extra table just to align fields better
+        print '</table>';
+        print $q->table ({border => 0, cellspacing => 0, cellpadding => 4},
+
+        #time for automation
+        #esmith::cgi::genTextRow ($q, $q->p ('<b>Timing</b>')),
+
+        esmith::cgi::genTextRow ($q, $q->p ('Select the time, and day or days to run.
+                                             Hourly runs each hour at the nominated minutes past the hour.
+                                             Enabling automatic backups by selecting on,
+                                             allows you to choose which days to run.')),
+
+        esmith::cgi::genWidgetRow ($q, "Automatic backups",
+                        $q->popup_menu (-name    => 'freq',
+                                        -values  => ['off','on','hourly'] ,
+                                        -default => db_get_prop(\%dungog, $rsync, "freq") || 'off',)),
+
+        esmith::cgi::genWidgetRow ($q, "Backup time, minute",
+                        $q->popup_menu (-name    => 'min',
+                                        -values  => ['1','4','7','10','13','16','19','22','25','28','31','33','36','39','42','45','48','51','54','57','59'] ,
+                                        -default => db_get_prop(\%dungog, $rsync, "min") || '16',)),
+
+        esmith::cgi::genWidgetRow ($q, "Backup time, 24 hour",
+                        $q->popup_menu (-name    => 'hour',
+                                        -values  => ['1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','17','18','19','20','21','22','23'] ,
+                                        -default => db_get_prop(\%dungog, $rsync, "hour") || '3',
+                                        -labels  => \%Labels3)),
+
+        esmith::cgi::genWidgetRow ($q, "Backup time, day of week",
+                        $q->popup_menu (-name    => 'day',
+                                        -values  => ['*','1-5','0,6','sun','1','2','3','4','5','6'] ,
+                                        -default => db_get_prop(\%dungog, $rsync, "day") || '4',
+                                        -labels  => \%Labels)),
+
+        esmith::cgi::genTextRow ($q, $q->p ('Click Save to enable the above settings')));
+
+    print $q->Tr (esmith::cgi::genButtonRow ($q,
+      $q->submit (-name => 'action', -value => 'Save Job')));
+
+    print $q->Tr (esmith::cgi::genTextRow ($q, $q->p ('After saving your settings
+                     you can run the backup immediately by clicking below.')));
+
+    print $q->Tr (esmith::cgi::genButtonRow ($q,
+      $q->submit (-name => 'action', -value => 'Run this rsync job now')));
+
+    print $q->h4 ('Current rsync script file');
+
+    if ( -e "/usr/bin/dungogrsync-$rsync" )
+    {
+      print "<table border=1 cellspacing=1 cellpadding=4>";
+
+      print '<font color = "green">';
+      print "<pre>";
+      open (INF,"/usr/bin/dungogrsync-$rsync")
+      or die ("can't open rsync script: $1");
+
+      while (<INF>)
+      {
+          print "$_";
+      }
+
+      close INF;
+      print "</pre>\n";
+    }
+
+    print '</font>';
+    print '<font color = "black">';
+    print $q->hidden (-name => 'state', -override => 1, -default => 'choosesub');
+    print $q->hidden (-name => 'rsync', -override => 1, -default => $rsync);
+
+    print $q->endform;
+    print $q->p ($q->hr, $q->font ({size => "-1"}, "Copyright dungog.net",
+          $q->a ({href => $q->url (-absolute => 1) . "?state=help"}, 'Rsync help'), " ..."));
+
+    print '</FONT>';
+    print '</DIV>';
+    print $q->end_html;
+}
+
+sub performShowAnon ($)
+{
+    my ($q) = @_;
+    my $rsync        = $q->param ('rsync');
+    my $desc         = $q->param ('desc')        || '';
+    my $options      = $q->param ('options')     || '';
+    my $compress     = $q->param ('compress')    || '';
+    my $mail         = $q->param ('mail')        || '';
+    my $localdir     = $q->param ('localdir')    || '';
+    my $remoteserver = $q->param ('remoteserver')|| '';
+    my $freq         = $q->param ('freq')        || '';
+    my $hour         = $q->param ('hour')        || '';
+    my $min          = $q->param ('min')         || '';
+    my $day          = $q->param ('day')         || '';
+    my $bwlimit      = $q->param ('bwlimit')     || '';
+
+    if ($rsync =~ /^([a-z][\-\_\.a-z0-9]*)$/)
+    {
+        $rsync = $1;
+    }
+
+    if ($desc =~ /^([a-z][\-\_\.a-z0-9]*)$/)
+    {
+        $desc = $1;
+    }
+
+    unless (exists $dungog {$rsync})
+    {
+      db_set(\%dungog, $rsync, 'rsyncAnon');
+    }
+    db_set_prop(\%dungog, $rsync, "desc",         $desc);
+    db_set_prop(\%dungog, $rsync, "options",      $options);
+    db_set_prop(\%dungog, $rsync, "compress",     $compress);
+    db_set_prop(\%dungog, $rsync, "mail",         $mail);
+    db_set_prop(\%dungog, $rsync, "freq",         $freq);
+    db_set_prop(\%dungog, $rsync, "day",          $day);
+    db_set_prop(\%dungog, $rsync, "hour",         $hour);
+    db_set_prop(\%dungog, $rsync, "min",          $min);
+    db_set_prop(\%dungog, $rsync, "bwlimit",      $bwlimit);
+
+    #check for invalid characters
+    if ($remoteserver =~ /^([\/\-\_\.A-Za-z0-9]*::[\/\-\_\.A-Za-z0-9]*)$/)
+    {
+      $_ = $1;
+    }
+    else
+    {
+      showAnon ($q, "Error: You have invalid characters for the remote server [$remoteserver], ".
+                    "use only /\-\_\.A-Za-z0-9 with the domain and directory separated by ::");
+      return;
+    }
+
+    db_set_prop(\%dungog, $rsync, "remoteserver", $remoteserver);
+
+    if ($localdir =~ /^([\/\-\_\.A-Za-z0-9]*)$/)
+    {
+      $_ = $1;
+    }
+    else
+    {
+      showAnon ($q, "Error: You have invalid characters in the local directory [$localdir], use only /\-\_\.A-Za-z0-9");
+      return;
+    }
+
+    #test that local directory exists
+    unless ( -e "$localdir" )
+    {
+      showAnon ($q, "Error, local server directory does not exist. [$localdir]");
+      return;
+    }
+
+    db_set_prop(\%dungog, $rsync, "localdir", $localdir);
+
+    system ("/sbin/e-smith/signal-event conf-dungogrsyncanon $rsync") == 0
+        or die ("Error occurred while updating system configuration.\n");
+
+    system ("/sbin/e-smith/expand-template /etc/crontab") == 0
+        or die ("Error occurred expanding crontab.\n");
+
+    showAnon ($q, 'settings saved');
+    return;}
+
+
+#   -------------   ibay anon setup ------------------------
+
+sub showIbay ($$)
+{
+    my ($q, $msg) = @_;
+
+    if ($msg eq '')
+    {
+          esmith::cgi::genHeaderNonCacheable
+            ($q, \%conf, 'Anonymous Rsync');
+    }
+    else
+    {
+        esmith::cgi::genHeaderNonCacheable
+            ($q, \%conf, 'Anonymous Rsync');
+
+        print $q->h4 ('Operation status report');
+        print $q->p ($msg);
+        print $q->hr;
+    }
+
+    print $q->startform (-method => 'POST', -action => $q->url (-absolute => 1));
+
+    #configure and select set
+    print $q->h4 ('Ibays');
+
+    # setup ibays to be used for anonymous ibay
+    my @ibayAccounts = ();
+    foreach (sort keys %accounts)
+    {
+      push (@ibayAccounts, $_)
+          if (db_get_type(\%accounts, $_) eq "ibay");
+    }
+
+    unless (scalar @ibayAccounts)
+    {
+      print $q->p ($q->b ('There are no information bays in the system.'));
+    }
+    else
+    {
+      #short intro
+      print $q->p ($q->p ('Information Bays shown in red have Global Access set to
+           [Entire Internet- no password required], this settings enables Anonymous Rsync access
+           to the <b>ibayname/files</b> directory,<p>
+           Click modify to toggle the ibays Public Access to
+           \'global\' to allow access [shown in red]
+           or \'local\' disallow access [shown in black].<p>
+
+           Use the <a href=ibays>Information Bays</a> panel for
+           finer control for deselecting global Public access and to set read permission, either
+           set user access read to everyone, or if read access is set to group, group is everyone.'));
+
+      unless ( -e '/etc/e-smith/templates/etc/hosts.allow/rsync')
+      {
+          print $q->p ($q->p ('To allow external access to your files install.<br>
+                               e-smith-rsyncd-0.0.2-01 for 5.6 & above<br>
+                               Charlie Brady prepared these rpms which are also available
+                               at dungog.net/sme/files. Thanks Charlie ! '));
+      }
+
+      print $q->p ($q->a ({href => $q->url (-absolute => 1) . "?state=recentRsync"},
+                   'Click here'),
+                   'to view logs of recent access to your rsync server.');
+
+      print "<table border=1 cellspacing=1 cellpadding=4>";
+
+      print $q->Tr (esmith::cgi::genSmallCell ($q, $q->b ('Name')),
+                    esmith::cgi::genSmallCell ($q, $q->b ('Description')),
+                    esmith::cgi::genSmallCell ($q, $q->b ('Permissions')),
+                    $q->td ('&nbsp;'));
+
+      my $ibay = '';
+      foreach $ibay (sort @ibayAccounts)
+      {
+          my $name = db_get_prop(\%accounts, "$ibay", 'Name') || '';
+          my $PublicAccess = db_get_prop(\%accounts, "$ibay", "PublicAccess") || '';
+          my $Group = db_get_prop(\%accounts, "$ibay", "Group") || '';
+          my $UserAccess = db_get_prop(\%accounts, "$ibay", "UserAccess") || '';
+          my $perms ='check';
+
+          if ($UserAccess eq 'wr-group-rd-everyone')
+          {
+              $perms = 'ok';
+          }
+          elsif ($Group eq 'shared')
+          {
+              $perms = 'ok';
+          }
+
+          unless ($PublicAccess eq 'global')
+          {
+              print $q->Tr (esmith::cgi::genSmallCell ($q, $ibay),
+                            esmith::cgi::genSmallCell ($q, $name),
+                            esmith::cgi::genSmallCell ($q, ''),
+                            esmith::cgi::genSmallCell ($q,
+                              $q->a ({href => $q->url (-absolute => 1)
+                                 . "?state=modifyibay&&PublicAccess=global&ibay="
+                                 . $ibay}, 'Modify...')));
+          }
+          else
+          {
+              print $q->Tr (esmith::cgi::genSmallRedCell ($q, $ibay),
+                            esmith::cgi::genSmallRedCell ($q, $name),
+                            esmith::cgi::genSmallRedCell ($q, $perms),
+                            esmith::cgi::genSmallCell ($q,
+                             $q->a ({href => $q->url (-absolute => 1)
+                                        . "?state=modifyibay&&PublicAccess=local&ibay="
+                                        . $ibay}, 'Modify...')));
+          }
+      }
+      print '</table>';
+    }
+
+    #enable/disable rsyncd
+    print $q->h4 ('Status');
+    print $q->p ($q->p ('Disable or enable access to files on your server via Anonymous Rsync'));
+
+    print $q->p (esmith::cgi::genWidgetRow ($q, "Anonymous Rsync",
+                        $q->popup_menu (-name    => 'status',
+                             -values  => ['enabled','disabled'],
+                             -default => db_get_prop(\%conf, 'rsync', 'status') || 'disabled')));
+
+    print $q->p (esmith::cgi::genButtonRow ($q,
+                   $q->submit (-name  => 'action',
+                               -value => 'Save')));
+
+    print $q->hidden (-name     => 'state',
+                      -override => 1,
+                      -default  => 'performAnon');
+
+    print $q->endform;
+    print $q->p ($q->hr, $q->font ({size => "-1"}, "Copyright dungog.net",
+          $q->a ({href => $q->url (-absolute => 1) . "?state=help"}, 'Rsync help'), " ..."));
+
+    print '</FONT>';
+    print '</DIV>';
+    print $q->end_html;
+}
+
+sub modifyIbay ($)
+{
+    my ($q) = @_;
+    my $ibay         = $q->param ('ibay')         ||'';
+    my $PublicAccess = $q->param ('PublicAccess') ||'local';
+
+    if ($ibay =~ /^([a-z][\-\_\.a-z0-9]*)$/)
+    {
+        $ibay = $1;
+    }
+
+    db_set_prop(\%accounts, $ibay, "PublicAccess", $PublicAccess);
+
+    system ("/sbin/e-smith/signal-event ibay-modify $ibay") == 0
+        or die ("Error occurred :signal-event ibay-modify.\n");
+
+    showIbay ($q, "Successfully modified Ibay.");
+}
+#ibay anon
+sub performAnon ($)
+{
+    my ($q) = @_;
+    my $status    = $q->param ('status')  ||'';
+
+    if ($status =~ /^([a-z][\-\_\.a-z0-9]*)$/)
+    {
+        $status = $1;
+    }
+
+    unless (exists $conf {'rsync'})
+    {
+     db_set(\%conf, 'rsync', 'service');
+    }
+
+    db_set_prop(\%conf, 'rsync', 'status', $status);
+
+    system ("/sbin/e-smith/expand-template /etc/rsyncd.conf") == 0
+        or die ("Error occurred :expand-template /etc/rsyncd.conf.\n");
+
+    system ("/sbin/e-smith/signal-event remoteaccess-update") == 0
+        or die ("Error occurred :signal-event remoteaccess-update.\n");
+
+    showIbay ($q, "Successfully altered status.");
+}
+
+sub deleteRsync ($)
+{
+    my ($q) = @_;
+    my $rsync = $q->param ('rsync') ||'';
+
+    if ($rsync =~ /^([a-z][\-\_\.a-z0-9]*)$/)
+    {
+        $rsync = $1;
+    }
+
+    db_delete(\%dungog, "$rsync");
+
+    system ("/sbin/e-smith/signal-event conf-dungogrsync $rsync") == 0
+        or die ("Error occurred :conf-dungogrsync $rsync.\n");
+    system ("/bin/rm /usr/bin/dungogrsync-$rsync") == 0
+        or die ("Error occurred :rm /usr/bin/dungogrsync.\n");
+
+    showInitial ($q, "Successfully removed rsync job.");
+}
+
+sub deleteItem ($)
+{
+    my ($q) = @_;
+
+    my $type  = $q->param ('type') ||'';
+    my $item  = $q->param ('item') ||'';
+    my $rsync = $q->param ('rsync') ||'';
+    my @add  = ();
+    my @list = ();
+
+    if ($rsync =~ /^([a-z][\-\_\.a-z0-9]*)$/)
+    {
+        $rsync = $1;
+    }
+
+    if ($type eq 'localdir')
+    {
+      my $localdirlist = db_get_prop(\%dungog, "$rsync", "localdirlist") || 'none';
+      my @localdirlist = split(/,/, $localdirlist);
+
+      foreach (@localdirlist)
+      {
+        unless ($_ eq $item) { push(@add, "$_") }
+        @list = join(',', @add);
+      }
+
+      db_set_prop(\%dungog, $rsync, "localdirlist", "@list");
+    }
+
+    if ($type eq 'remoteserver')
+    {
+      my $remoteserverlist = db_get_prop(\%dungog, "$rsync", "remoteserverlist") || 'none';
+      my @remoteserverlist = split(/,/, $remoteserverlist);
+
+      foreach (@remoteserverlist)
+      {
+        unless ($_ eq $item) { push(@add, "$_") }
+        @list = join(',', @add);
+      }
+
+      db_set_prop(\%dungog, $rsync, "remoteserverlist", "@list");
+    }
+
+    if ($type eq 'remotedir')
+    {
+      my $remotedirlist = db_get_prop(\%dungog, "$rsync", "remotedirlist") || 'none';
+      my @remotedirlist = split(/,/, $remotedirlist);
+
+      foreach (@remotedirlist)
+      {
+        unless ($_ eq $item) { push(@add, "$_") }
+        @list = join(',', @add);
+      }
+
+      db_set_prop(\%dungog, $rsync, "remotedirlist", "@list");
+    }
+
+
+    system ("/sbin/e-smith/signal-event conf-dungogrsync $rsync") == 0
+        or die ("Error occurred while updating system configuration.\n");
+
+    system ("/sbin/e-smith/expand-template /etc/crontab") == 0
+        or die ("Error occurred expanding crontab.\n");
+
+    modifyRsync ($q, "Settings saved, $item removed");
+
+}
+
+#backup now any backupset
+sub performRsyncNow ($)
+{
+    my ($q) = @_;
+    my $rsync = $q->param ('rsync');
+    my $user  = $q->param ('user');
+
+    if ($rsync =~ /^([a-z][\-\_\.a-z0-9]*)$/)
+    {
+        $rsync = $1;
+    }
+
+    if ($user =~ /^([a-z][\-\_\.a-z0-9]*)$/)
+    {
+        $user = $1;
+    }
+
+    esmith::util::backgroundCommand (1, "/sbin/e-smith/signal-event", "run-rsync", "$rsync", "$user");
+
+    esmith::cgi::genHeaderNonCacheable
+	      ($q, \%conf, "Backup request initiated.");
+
+    print $q->p ($q->a ({href => $q->url (-absolute => 1) . "?state=rsyncNowResults"},
+                'Click here'),
+                'for progressive information on the transfer.');
+
+    print $q->endform;
+    print $q->p ($q->hr, $q->font ({size => "-1"}, "Copyright dungog.net",
+          $q->a ({href => $q->url (-absolute => 1) . "?state=help"}, 'Rsync help'), " ..."));
+
+    print '</FONT>';
+    print '</DIV>';
+    print $q->end_html;
+}
+
+sub rsyncNowResults ($)
+{
+    my ($q) = @_;
+
+      esmith::cgi::genHeaderNonCacheable
+	      ($q, \%conf, "Backup request initiated.");
+
+    print $q->startform (-method => 'POST', -action => $q->url (-absolute => 1));
+
+    print $q->h4 ('Current rsync activity file');
+
+    print $q->p ($q->a ({href => $q->url (-absolute => 1) . "?state=rsyncNowResults"},
+                'Click here'),
+                'to refresh this page for progessive information.');
+
+    if ( -e "/var/log/dungogrsyncnow" )
+    {
+      print "<table border=1 cellspacing=1 cellpadding=4>";
+
+      print '<font color = "green">';
+      print "<pre>";
+      open (INF,"/var/log/dungogrsyncnow")
+      or die ("can't open rsync log file: $1");
+
+      while (<INF>)
+      {
+          print "$_";
+      }
+
+      close INF;
+      print "</pre>\n";
+    }
+
+    print '</font>';
+    print '<font color = "black">';
+    print $q->endform;
+    print $q->p ($q->hr, $q->font ({size => "-1"}, "Copyright dungog.net",
+          $q->a ({href => $q->url (-absolute => 1) . "?state=help"}, 'Rsync help'), " ..."));
+
+    print '</FONT>';
+    print '</DIV>';
+    print $q->end_html;
+
+}
+
+sub recentRsync ($)
+{
+    my ($q) = @_;
+
+    esmith::cgi::genHeaderNonCacheable
+	      ($q, \%conf, "Recent rsync activity");
+
+    system ("/bin/cat /var/log/messages |/bin/grep rsyncd > /tmp/recentrsync") == 0
+        or die ("Error occurred viewing usage.\n");
+
+    print $q->startform (-method => 'POST', -action => $q->url (-absolute => 1));
+
+    if ( -e "/tmp/recentrsync" )
+    {
+      print "<table border=1 cellspacing=1 cellpadding=4>";
+
+      print '<font color = "green">';
+      print "<pre>";
+      open (INF,"/tmp/recentrsync")
+      or die ("can't open rsync log file: $1");
+
+      while (<INF>)
+      {
+          print "$_";
+      }
+
+      close INF;
+      print "</pre>\n";
+    }
+
+    print '</font>';
+    print '<font color = "black">';
+    print $q->endform;
+    print $q->p ($q->hr, $q->font ({size => "-1"}, "Copyright dungog.net",
+          $q->a ({href => $q->url (-absolute => 1) . "?state=help"}, 'Rsync help'), " ..."));
+
+    print '</FONT>';
+    print '</DIV>';
+    print $q->end_html;
+
+}
+
+sub showHelp ($)
+{
+    my ($q) = @_;
+
+    esmith::cgi::genHeaderNonCacheable
+        ($q, \%conf, 'Rsync Help');
+
+    print $q->startform (-method => 'POST',
+                         -action => $q->url (-absolute => 1));
+
+    print $q->table ({border => 0, cellspacing => 0, cellpadding => 4},
+
+        esmith::cgi::genTextRow ($q, $q->p ('<pre>
+* <a href="#1">General</a>
+* <a href="#2">Secure rsync</a>
+* <a href="#2s">SSH keys</a>
+* <a href="#3port">Changing the port</a>
+* <a href="#3">Rsync Anonymous server</a>
+* <a href="#4">Rsync Anonymous client</a>
+* <a href="#5">Exclude / Include syntax</a>
+* <a href="#6">Advanced</a>
+
+<a name="1"><h3>General</h3></a>
+Transfer files between your sme server and other servers with ssh and rsync installed.
+Automate the process using a secure ssh connection.
+Distribute to or collect data from other servers automatically.
+
+<a name="2"><h3>Secure rsync</h3></a>
+<b>Safeguards</b>
+To prevent server resources being overused only one rsync job is 
+permitted to run at once, this can be overridden with the db command
+db dungog setprop rsync overlap allow
+
+Emails to admin warn of this and other errors, and advise of success, please check for them.
+
+<b>Method</b>
+For multiple directory or server transfers it could get very confusing,
+so only enter multiple entries for one catagory, if you enter extra entries
+only one is used. See the advanced section below for workarounds
+
+<b>Notes</b>
+You can transfer a single file instead of a directory.
+Enclose directories or filenames that include spaces with a double quote
+
+Save the panel settings in stages, it is frustrating to have to re-enter data
+when you get an error becasue your local path/filename is wrong 
+
+Remember to remove the extra server or directory record after using the copy&Edit... link
+
+Rsync will attempt to transfer data at the I/O bandwith rate, 
+the actual rate depends on network traffic and hardware
+
+<a name="2s"><h3>SSH Keys</h3></a>
+To automate the transfer you need to establish a secure connection
+without being prompted for a password. To connect with ssh to the user
+on a remote server you need to place the public key of whichever user
+you are using on this server into ~/.ssh/authorized_keys on the remote user/server.
+
+cd /home/e-smith/files/users/dummy/.ssh
+ssh-keygen -t rsa [accept file name id_rsa][don\'t enter a passphrase]
+ssh dummy@remote-server.net mkdir .ssh
+scp id_rsa.pub dummy@remote-server.net:.ssh/dummy.localserver.pub
+ ssh dummy@remote-server.net
+ cd .ssh
+ cat dummy.localserver.pub >> authorized_keys
+[or for the first key
+scp id_rsa.pub dummy@remote-server.net:.ssh/authorized_keys ]
+
+now you should be able to "ssh dummy@remote-server.net" without a passord prompt
+
+<a name="3port"><h3>Changing the port</h3></a> to connect to a remote server
+ 
+dungog-rsync and dungog-backup
+can use a db setting to find the ssh port of your remote servers
+
+set the port for any server with the following commands
+
+run this once
+# /sbin/e-smith/db dungog set remoteport setting
+
+then for each server
+# /sbin/e-smith/db dungog setprop remoteport mail.server2.com 2211
+
+verify
+# /sbin/e-smith/db dungog show remoteport
+  remoteport=setting
+     mail.server2.com=2211
+     www.server3.com=2212
+
+<a name="3"><h3>Rsync Anonymous server TODO</h3></a>
+To make files available for download by Anonymous Rsync you place them
+in the files directory of an ibay and make it globally accesable.
+The panel shows which servers have the correct settings and warns of
+possible errors in permissions. It has an option to enable or disable
+anonymous rsync access.
+
+You need to install e-smith-rsyncd 
+
+e-smith-rsyncd was built by Charlie Brady and is GPL
+part of dungog-rsync acts as a wrapper around e-smith-rsyncd to make
+it easier to use and to see what is being made available
+
+<a name="4"><h3>Rsync Anonymous client</h3></a>
+
+Used to pull files from an anonymous rsync server
+
+<a name="5"><h3>Exclude / Include syntax</h3></a>
+
+here is a simple example
+# cat /opt/rsync55622.ex 
+/home/e-smith/files/ibays/backup/
+*.bak
+
+Note. the exlude file is matched first
+From man rsync
+
+ --exclude-from=FILE
+        This option allows you to selectively exclude  cer­
+        tain  files  from  the  list  of files to be trans­
+        ferred. This is most useful in combination  with  a
+        recursive transfer.
+
+        This option adds all exclude patterns listed in the
+        file FILE to the exclude list.  Blank lines in FILE
+        and lines starting with ´;´ or ´#´ are ignored.  If
+        FILE is - the  list  will  be  read  from  standard
+        input.
+
+EXCLUDE PATTERNS
+       The exclude and include patterns specified to rsync  allow
+       for  flexible  selection  of  which  files to transfer and
+       which files to skip.
+
+       rsync builds an ordered list of include/exclude options as
+       specified  on the command line. When a filename is encoun­
+       tered, rsync checks the name against each  exclude/include
+       pattern  in  turn. The first matching pattern is acted on.
+       If it is an exclude pattern, then that file is skipped. If
+       it  is  an  include  pattern  then  that  filename  is not
+       skipped. If no matching include/exclude pattern  is  found
+       then the filename is not skipped.
+
+       Note  that  when  used  with  -r (which is implied by -a),
+       every subcomponent of every path is visited from top down,
+       so  include/exclude  patterns  get  applied recursively to
+       each subcomponent.
+
+       The patterns can take several forms. The rules are:
+
+       o      if  the  pattern starts with a / then it is matched
+              against the start of the filename, otherwise it  is
+              matched  against  the  end  of  the filename.  Thus
+              "/foo" would match a file called "foo" at the  base
+              of  the tree.  On the other hand, "foo" would match
+              any file called "foo" anywhere in the tree  because
+              the algorithm is applied recursively from top down;
+              it behaves as if each path component gets a turn at
+              being the end of the file name.
+
+       o      if  the  pattern  ends  with  a / then it will only
+              match a directory, not a file, link or device.
+
+       o      if the pattern contains a wildcard  character  from
+              the  set  *?[  then  expression matching is applied
+              using the shell filename matching rules.  Otherwise
+              a simple string match is used.
+
+       o      if the pattern includes a double asterisk "**" then
+              all wildcards in the pattern  will  match  slashes,
+              otherwise they will stop at slashes.
+
+       o      if  the pattern contains a / (not counting a trail­
+              ing /) then it is matched against  the  full  file­
+              name,  including any leading directory. If the pat­
+              tern doesn´t contain a / then it  is  matched  only
+              against   the  final  component  of  the  filename.
+              Again,  remember  that  the  algorithm  is  applied
+              recursively  so "full filename" can actually be any
+              portion of a path.
+
+       o      if the pattern starts with "+ " (a plus followed by
+              a  space)  then  it is always considered an include
+              pattern, even if specified as part  of  an  exclude
+              option. The "+ " part is discarded before matching.
+
+       o      if the pattern starts with "- " (a  minus  followed
+              by a space) then it is always considered an exclude
+              pattern, even if specified as part  of  an  include
+              option. The "- " part is discarded before matching.
+
+       o      if the pattern is a single exclamation mark !  then
+              the current include/exclude list is reset, removing
+              all previously defined patterns.
+
+       The +/- rules are most useful in exclude  lists,  allowing
+       you  to  have  a  single  exclude  list that contains both
+       include and exclude options.
+
+       If you end an exclude list with --exclude ´*´,  note  that
+       since the algorithm is applied recursively that unless you
+       explicitly include parent directories of files you want to
+       include  then the algorithm will stop at the parent direc­
+       tories and never see the files below them.  To include all
+       directories,  use --include ´*/´ before the --exclude ´*´.
+
+       Here are some exclude/include examples:
+
+       o      *.o would exclude all filenames
+              matching *.o
+
+       o      /foo  would exclude a file in the base
+              directory called foo
+
+       o       "foo/" would exclude any directory called
+              foo
+
+       o      /foo/*/bar  would  exclude  any  file
+              called bar two levels below a base directory called
+              foo
+
+       o      /foo/**/bar  would  exclude  any  file
+              called bar two or more levels below a  base  direc­
+              tory called foo
+
+       o      */
+              *.c
+              * would
+              include all directories and C source files
+
+       o      foo/
+              foo/bar.c
+              *  would  include only foo/bar.c (the foo/ direc­
+              tory must be explicitly included  or  it  would  be
+              excluded by the "*")
+
+<a name="6"><h3>Advanced</h3></a>
+
+Not all rsync options can be applied with the panel, if you have
+a need to further refine your script you can
+
+1.
+the panel creates shell scripts in /usr/bin/ called dungogrsync-rsync*
+eg.
+-rwxr-xr-x  1 cathie   admin 467 Sep 30 21:34 /usr/bin/dungogrsync-rsync55622
+-rwxr-xr-x  1 stephen  admin 593 Oct  1 01:28 /usr/bin/dungogrsync-rsync608624
+
+2.
+if automated, these are called from cron
+
+3.
+you can take these files,
+copy and/or combine them into a new files so they are not overwritten
+then add the new file into cron, eg with dungog-cron.
+
+* combining the files will let one job finish before a new one starts
+
+* you can add other options,
+either generate a dummy script with the panel to check syntax,
+or read the manual, man rsync or google
+
+</pre>   ')));
+
+    print $q->endform;
+    print $q->p ($q->hr, $q->font ({size => "-1"}, "Copyright dungog.net",
+          $q->a ({href => $q->url (-absolute => 1) . ""}, 'Return to main'), " ..."));
+    return;
+}

@@ -1,0 +1,15 @@
+#! /usr/bin/perl -w
+
+use esmith::Build::CreateLinks qw(:all);
+
+my $event;
+panel_link("dungog-rsync", 'manager');
+
+$event = 'conf-dungogrsync';
+event_link("conf-dungogrsync", "$event", "55");
+
+$event = 'conf-dungogrsyncanon';
+event_link("conf-dungogrsyncanon", "$event", "55");
+
+$event = 'run-rsync';
+event_link("run-rsync", "$event", "55");

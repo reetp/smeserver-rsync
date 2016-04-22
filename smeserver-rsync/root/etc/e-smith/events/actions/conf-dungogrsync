@@ -1,0 +1,238 @@
+#!/usr/bin/perl -w
+
+#----------------------------------------------------------------------
+# Author Stephen Noble <stephen@dungog.net>
+# create rsync scripts for dungog-rsync
+#----------------------------------------------------------------------
+
+package esmith;
+
+use esmith::config;
+use esmith::util;
+use esmith::db;
+
+my %conf;
+tie %conf, 'esmith::config';
+
+local %dungog;
+tie %dungog, 'esmith::config', '/home/e-smith/db/dungog';
+
+my $rsync = $ARGV [1];
+die "rsync argument missing." unless defined ($rsync);
+
+  unlink ("/usr/bin/dungogrsync-$rsync");
+
+  #define some variables
+  my $method            = db_get_prop(\%dungog, $rsync, "method")  || '';
+  my $user              = db_get_prop(\%dungog, $rsync, "user")    || '';
+  my $options           = db_get_prop(\%dungog, $rsync, "options") || '';
+  my $compress          = db_get_prop(\%dungog, $rsync, "compress")|| '';
+  my $delete            = db_get_prop(\%dungog, $rsync, "delete")  || '';
+  my $noping            = db_get_prop(\%dungog, $rsync, "noping")  || '';
+  my $dbdump            = db_get_prop(\%dungog, $rsync, "dbdump")  || '';
+  my $pre               = db_get_prop(\%dungog, $rsync, "pre")     || '';
+  my $post              = db_get_prop(\%dungog, $rsync, "post")    || '';
+  my $bwlimit           = db_get_prop(\%dungog, $rsync, "bwlimit") || '';
+
+  my $localdirlist1     = db_get_prop(\%dungog, "$rsync", "localdirlist") || 'none';
+  my @localdirlist      = split(/,/, $localdirlist1);
+  my $localdir          = $localdirlist[$#localdirlist]     || '';
+
+  my $remoteserverlist1 = db_get_prop(\%dungog, "$rsync", "remoteserverlist") || 'none';
+  my @remoteserverlist  = split(/,/, $remoteserverlist1);
+  my $remoteserver      = $remoteserverlist[$#remoteserverlist] || '';
+
+  my $remotedirlist1    = db_get_prop(\%dungog, "$rsync", "remotedirlist") || 'none';
+  my @remotedirlist     = split(/,/, $remotedirlist1);
+  my $remotedir         = $remotedirlist[$#remotedirlist]    || '';
+
+  my $OPTS              = '$OPTS';
+  my $VAR               = '$VAR';
+  my $PATH              = '$PATH';
+  my $C                 = '';
+  my $D                 = '';
+  my $T                 = '';
+  my $ex                = '';
+  my $in                = '';
+  my $bw                = '';
+
+  #create rsync script /usr/bin/dungogrsync-$rsync
+  my $fname = "/usr/bin/dungogrsync-$rsync";
+  open (RUN, ">$fname") || die ("Can't open $fname: $!");
+
+  print RUN "#!/bin/bash\n";
+  print RUN "\n";
+  print RUN "# rsync 'driver' script.  (Uses SSH as the transport layer.)\n";
+  print RUN "export PATH=$PATH:/bin:/usr/bin:/usr/local/bin\n";
+  print RUN "\n";
+  
+  my $overlap    = db_get_prop(\%dungog, 'rsync',  "overlap")    || '';
+  if ($overlap ne 'allow')
+  {
+    print RUN "/bin/ps ax > /tmp/check\n";
+    print RUN "CHK=`/bin/cat /tmp/check | /bin/grep /usr/bin/rsync`\n";
+    print RUN "if ! \$CHK ; then\n";
+    print RUN "  /bin/echo 'just ignore the warning above, it tells us'\n";
+    print RUN "  /bin/echo 'rsync is already running, exiting...'\n";
+    print RUN "  exit 0\n";
+    print RUN "fi\n";
+    print RUN "\n";
+  }
+
+  if ($pre ne '')
+  {
+    print RUN "# pre rsync command\n";
+    print RUN "$pre\n";
+    print RUN "\n";
+  }
+
+  if ($compress eq 'on')
+  {
+    $C = '--compress';
+  }
+
+  if ($delete eq 'on')
+  {
+    $D = '--delete';
+  }
+
+  unless ($bwlimit eq 'none')
+  {
+    $bw = "--bwlimit=$bwlimit";
+  }
+
+  if (-e "/opt/$rsync.ex")
+  {
+    $ex = "--exclude-from=/opt/$rsync.ex";
+  }
+
+  if (-e "/opt/$rsync.in")
+  {
+    $in = "--include-from=/opt/$rsync.in";
+  }
+
+  if ($options eq 'test')
+  {
+    $T = '--dry-run -vv';
+    print RUN "# For testing.  Only displays what rsync 'would' do and does no actual copying.\n";
+    print RUN "OPTS='$T -u -a $C $D $ex $in $bw --stats --progress'\n";
+  }
+  elsif ($options eq 'verbose')
+  {
+    $T = '-v';
+    print RUN "# Does copy, but still gives a verbose display of what it is doing.\n";
+    print RUN "OPTS='$T -u -a $C $D $ex $in $bw --stats --progress'\n";
+  }
+  elsif ($options eq 'stats')
+  {
+    print RUN "# Does copy, not so verbose.\n";
+    print RUN "OPTS='-u -a $C $D $ex $in $bw --stats'\n";
+  }
+  elsif ($options eq 'quiet')
+  {
+    print RUN "# Copies and does no display at all.\n";
+    print RUN "OPTS='-u -a $C $D $ex $in $bw --quiet'\n";
+  }
+
+  if ($dbdump eq 'on')
+  {
+    print RUN "# dump mysql tables\n";
+    print RUN "/sbin/e-smith/signal-event pre-backup\n";
+    print RUN "\n";
+  }
+
+  print RUN "    echo 'Begin rsync transfer.'\n";
+  print RUN "\n";
+
+  #senddirs','sendservers','recievedirs','recieveservers
+  if ($method eq 'senddirs')
+  {
+    foreach (sort @localdirlist)
+    {
+      my $remoteport  = db_get_prop(\%dungog, "remoteport", $remoteserver) || '22';
+
+      # this server sends [directories to a server]\n";
+      print RUN "    echo ''\n";
+      print RUN "    echo 'Sending $_ to $remoteserver.'\n";
+      print RUN "    /usr/bin/rsync $OPTS -e \"ssh -p $remoteport\" $_ $remoteserver:$remotedir\n";
+      print RUN "\n";
+
+    }
+  }
+  elsif ($method eq 'sendservers')
+  {
+    foreach (sort @remoteserverlist)
+    {
+      my $remoteport  = db_get_prop(\%dungog, "remoteport", $_) || '22';
+
+      # this server sends [one dir to servers]\n";
+      print RUN "    echo ''\n";
+      print RUN "    echo 'Sending $localdir to $_.'\n";
+      print RUN "    /usr/bin/rsync $OPTS -e \"ssh -p $remoteport\" $localdir $_:$remotedir\n";
+      print RUN "\n";
+    }
+  }
+  elsif ($method eq 'recievedirs')
+  {
+    foreach (sort @remotedirlist)
+    {
+      my $remoteport  = db_get_prop(\%dungog, "remoteport", $remoteserver) || '22';
+
+      # this server recieves [dirs from servers]\n";
+      print RUN "    echo ''\n";
+      print RUN "    echo 'Recieving $_ from $remoteserver.'\n";
+      print RUN "    /usr/bin/rsync $OPTS  -e \"ssh -p $remoteport\" $remoteserver:$_ $localdir\n";
+      print RUN "\n";
+    }
+
+  }
+  elsif ($method eq 'recieveservers')
+  {
+    foreach (sort @remoteserverlist)
+    {
+      my $remoteport  = db_get_prop(\%dungog, "remoteport", $_) || '22';
+
+      # this server recieves [one dir from servers]\n";
+      print RUN "    echo ''\n";
+      print RUN "    echo 'Recieving $remotedir from $_.'\n";
+      print RUN "    /usr/bin/rsync $OPTS -e \"ssh -p $remoteport\" $_:$remotedir $localdir\$_\n";
+      print RUN "\n";
+    }
+  }
+  elsif ($method eq 'senddirs2self')
+  {
+    print RUN "# WARNING, if mounting a 2nd drive make sure you test the mount point \n";
+    print RUN "# mounts correctly, or you risk filling up your first drive.\n";
+    print RUN "# You may want to issue a pre rsync command to mount /mnt/2nddrive \n";
+    print RUN "#  \n";
+    foreach (sort @localdirlist)
+    {
+        # this server sends [directories to itself]\n";
+        print RUN "# run rsync \n";
+        print RUN "    echo ''\n";
+        print RUN "    echo 'Sending $_ to $conf{DomainName}'\n";
+        print RUN "    /usr/bin/rsync $T -u -R -a -l $ex $in --no-whole-file $D --stats $_ $remotedir\n";
+        print RUN "\n";
+    }
+  }
+  print RUN "    echo 'Ending rsync transfer.'\n";
+  print RUN "\n";
+
+  if ($dbdump eq 'on')
+  {
+     print RUN "/sbin/e-smith/signal-event post-backup\n";
+     print RUN "\n";
+  }
+
+  if ($post ne '')
+  {
+    print RUN "# post rsync command\n";
+    print RUN "$post\n";
+    print RUN "\n";
+  }
+
+  close RUN;
+  chmod 0755, $fname;
+  system("/bin/chown $user $fname");
+
+exit (0);
