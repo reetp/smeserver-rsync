@@ -1141,7 +1141,8 @@ sub showIbay ($$)
     else
     {
       #short intro
-      print $q->p ($q->p ('Information Bays shown in red have Global Access set to
+      print $q->p ($q->p ('<font style color="red">This is not fully functioning currently.</font></br>
+	    Information Bays shown in red have Global Access set to
            [Entire Internet- no password required], this settings enables Anonymous Rsync access
            to the <b>ibayname/files</b> directory,<p>
            Click modify to toggle the ibays Public Access to
@@ -1154,8 +1155,8 @@ sub showIbay ($$)
 
       unless ( -e '/etc/e-smith/templates/etc/hosts.allow/rsync')
       {
-          print $q->p ($q->p ('This is not fully functioning currentlyl.<br>
-                               It require smeserver-shared-folders to enable rsyncd<br>
+          print $q->p ($q->p ('This is not fully functioning currently.<br>
+                               It requires smeserver-shared-folders to enable rsyncd<br>
                                Work still required '));
       }
 
