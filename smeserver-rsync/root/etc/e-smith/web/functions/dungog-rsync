@@ -261,7 +261,7 @@ sub showInitial ($$)
     }
 
     #configure and select set
-    print $q->h4 ('Transfer Sets Summary - Secure -send to remote');
+    print $q->h4 ('Transfer Sets Summary - Send and Retrieve files via rsync using SSH');
 
     print $q->p ($q->a ({href => $q->url (-absolute => 1) . "?state=modifyrsync&&rsync=new"},
                     'Click here'),
@@ -339,7 +339,7 @@ sub showInitial ($$)
     print '<br />';
     
     #configure and select set
-    print $q->h4 ('Transfer Sets Summary - Anonymous retrieve from remote [untested]');
+    print $q->h4 ('Transfer Sets Summary - Anonymous rsync retrieve from remote [untested]');
 
     print $q->p ($q->a ({href => $q->url (-absolute => 1) . "?state=showAnon&&rsync=new"},
                    'Click here'),
@@ -421,9 +421,10 @@ sub showInitial ($$)
     # check to see if e-smith-rsyncd is installed
     # old code - unless ( -e "/etc/e-smith/events/actions/conf-rsyncd" )
     # use existing rsync key to decide whether the following section can be configured
-    my $rsync_status = db_get_prop(\%conf, "rsync", "status") || 'disabled';
+    # test for rsyncd property
+    my $rsyncd_status = db_get(\%conf, "rsyncd");
     
-    unless ($rsync_status eq 'enabled')
+    unless ($rsyncd_status ne '')
     {
       print $q->p (esmith::cgi::genSmallCell ($q, 'NOTE: Not currently working. To make files available for download by
               Anonymous Rsync to you need to install
@@ -878,7 +879,7 @@ sub showAnon ($$)
 
         esmith::cgi::genTextRow ($q, $q->p ('<b>General</b>')),
 
-        esmith::cgi::genTextRow ($q, $q->p ('This form allow you to mirror a set of files from a remote
+        esmith::cgi::genTextRow ($q, $q->p ('This form allows you to mirror a set of files from a remote
                                              server to your local server, when the remote files are being made
                                              available with a rsync server.')),
 
@@ -1130,41 +1131,33 @@ sub showIbay ($$)
     print $q->startform (-method => 'POST', -action => $q->url (-absolute => 1));
 
     #configure and select set
-    print $q->h4 ('Ibays');
+    print $q->h4 ('Shared Folders');
 
     # setup ibays to be used for anonymous ibay
     my @ibayAccounts = ();
     foreach (sort keys %accounts)
     {
       push (@ibayAccounts, $_)
-          if (db_get_type(\%accounts, $_) eq "ibay");
+          if (db_get_type(\%accounts, $_) eq "share");
     }
 
     unless (scalar @ibayAccounts)
     {
-      print $q->p ($q->b ('There are no information bays in the system.'));
+      print $q->p ($q->b ('There are no shared folders in the system.'));
     }
     else
     {
       #short intro
       print $q->p ($q->p ('<font style color="red">This is not fully functioning currently.</font></br>
-	         Information Bays shown in red have Global Access set to
-           [Entire Internet- no password required]. This settings enables Anonymous Rsync access
-           to the <b>ibayname/files</b> directory.<p>
-           Click modify to toggle the ibays Public Access to
-           \'global\' to allow access [shown in red]
-           or \'local\' disallow access [shown in black].<p>
+	         Shared Folders shown in red have Global Access set to <br />
+           <p>Use the <a href=shares>Shared Folders</a> panel for finer control</P>'));
 
-           Use the <a href=ibays>Information Bays</a> panel for
-           finer control for deselecting global Public access and to set read permission, either
-           set user access read to everyone, or if read access is set to group, group is everyone.'));
-
-      unless ( -e '/etc/e-smith/templates/etc/hosts.allow/rsync')
+      unless ( -e '/etc/rsyncd.conf')
       {
           print $q->p ($q->p ('This is not fully functioning currently.<br>
                                It requires smeserver-shared-folders to enable rsyncd<br>
-                               Work still required.
-                               Missing /etc/e-smith/templates/etc/hosts.allow/rsync ??'));
+                               Work still required.'
+                               ));
       }
 
       print $q->p ($q->a ({href => $q->url (-absolute => 1) . "?state=recentRsync"},
@@ -1175,8 +1168,9 @@ sub showIbay ($$)
 
       print $q->Tr (esmith::cgi::genSmallCell ($q, $q->b ('Name')),
                     esmith::cgi::genSmallCell ($q, $q->b ('Description')),
-                    esmith::cgi::genSmallCell ($q, $q->b ('Permissions')),
-                    $q->td ('&nbsp;'));
+                    esmith::cgi::genSmallCell ($q, $q->b ('Status')),
+                    esmith::cgi::genSmallCell ($q, $q->b ('Modify'))
+                   );
 
       my $ibay = '';
       foreach $ibay (sort @ibayAccounts)
@@ -1184,39 +1178,46 @@ sub showIbay ($$)
 	      unless ($ibay eq 'Primary')
 	      {
           my $name = db_get_prop(\%accounts, "$ibay", 'Name') || '';
-          my $PublicAccess = db_get_prop(\%accounts, "$ibay", "PublicAccess") || '';
-          my $Group = db_get_prop(\%accounts, "$ibay", "Group") || '';
-          my $UserAccess = db_get_prop(\%accounts, "$ibay", "UserAccess") || '';
-          my $perms ='check';
+          my $rsyncAccess = db_get_prop(\%accounts, "$ibay", "rsyncAccess") || '';
+          
+# vvv This whole section can probably go unless we want to set perms on a shared folder
+#          my $PublicAccess = db_get_prop(\%accounts, "$ibay", "PublicAccess") || '';
+#          my $Group = db_get_prop(\%accounts, "$ibay", "Group") || '';
+#          my $UserAccess = db_get_prop(\%accounts, "$ibay", "UserAccess") || '';
+#          my $perms ='check';
 
-          if ($UserAccess eq 'wr-group-rd-everyone')
-          {
-              $perms = 'ok';
-          }
-          elsif ($Group eq 'shared')
-          {
-              $perms = 'ok';
-          }
+#          if ($UserAccess eq 'wr-group-rd-everyone')
+#          {
+#              $perms = 'ok';
+#          }
+#          elsif ($Group eq 'shared')
+#          {
+#              $perms = 'ok';
+#          }
+# ^^^ To here 
+# Not sure about this - we should be able to toggle access for each share
 
-          unless ($PublicAccess eq 'global')
+print "<br />";
+
+          unless ($rsyncAccess eq 'global')
           {
               print $q->Tr (esmith::cgi::genSmallCell ($q, $ibay),
                             esmith::cgi::genSmallCell ($q, $name),
-                            esmith::cgi::genSmallCell ($q, ''),
+                            esmith::cgi::genSmallCell ($q, $rsyncAccess),
                             esmith::cgi::genSmallCell ($q,
                               $q->a ({href => $q->url (-absolute => 1)
-                                 . "?state=modifyibay&&PublicAccess=global&ibay="
-                                 . $ibay}, 'Modify...')));
+                                 . "?state=modifyibay&&rsyncAccess=global&share="
+                                 . $ibay}, 'Set Global...')));
           }
           else
           {
               print $q->Tr (esmith::cgi::genSmallRedCell ($q, $ibay),
                             esmith::cgi::genSmallRedCell ($q, $name),
-                            esmith::cgi::genSmallRedCell ($q, $perms),
+                            esmith::cgi::genSmallRedCell ($q, $rsyncAccess),
                             esmith::cgi::genSmallCell ($q,
                              $q->a ({href => $q->url (-absolute => 1)
-                                        . "?state=modifyibay&&PublicAccess=local&ibay="
-                                        . $ibay}, 'Modify...')));
+                                        . "?state=modifyibay&&rsyncAccess=local&share="
+                                        . $ibay}, 'Set Local...')));
           }
         }
       }
@@ -1224,14 +1225,14 @@ sub showIbay ($$)
     }
 
     # enable/disable rsyncd
-    # This should be changed to rsyncd ?
+    
     print $q->h4 ('Status');
     print $q->p ($q->p ('Disable or enable access to files on your server via Anonymous Rsync'));
 
-    print $q->p (esmith::cgi::genWidgetRow ($q, "Anonymous Rsync",
+    print $q->p (esmith::cgi::genWidgetRow ($q, "Anonymous Rsyncd",
                         $q->popup_menu (-name    => 'status',
                              -values  => ['enabled','disabled'],
-                             -default => db_get_prop(\%conf, 'rsync', 'status') || 'disabled')));
+                             -default => db_get_prop(\%conf, 'rsyncd', 'status') || 'disabled')));
 
     print $q->p (esmith::cgi::genButtonRow ($q,
                    $q->submit (-name  => 'action',
@@ -1253,20 +1254,20 @@ sub showIbay ($$)
 sub modifyIbay ($)
 {
     my ($q) = @_;
-    my $ibay         = $q->param ('ibay')         ||'';
-    my $PublicAccess = $q->param ('PublicAccess') ||'local';
+    my $ibay         = $q->param ('share')         ||'';
+    my $rsyncAccess = $q->param ('rsyncAccess') ||'local';
 
     if ($ibay =~ /^([a-z][\-\_\.a-z0-9]*)$/)
     {
         $ibay = $1;
     }
 
-    db_set_prop(\%accounts, $ibay, "PublicAccess", $PublicAccess);
+    db_set_prop(\%accounts, $ibay, "rsyncAccess", $rsyncAccess);
 
-    system ("/sbin/e-smith/signal-event ibay-modify $ibay") == 0
-        or die ("Error occurred :signal-event ibay-modify.\n");
+    system ("/sbin/e-smith/signal-event share-modify $ibay") == 0
+        or die ("Error occurred :signal-event share-modify.\n");
 
-    showIbay ($q, "Successfully modified Ibay.");
+    showIbay ($q, "Successfully modified Shared Folder.");
 }
 #ibay anon
 sub performAnon ($)
@@ -1279,12 +1280,20 @@ sub performAnon ($)
         $status = $1;
     }
 
-    unless (exists $conf {'rsync'})
+    unless (exists $conf {'rsyncd'})
     {
-     db_set(\%conf, 'rsync', 'service');
+     db_set(\%conf, 'rsyncd', 'service');
     }
 
-    db_set_prop(\%conf, 'rsync', 'status', $status);
+    db_set_prop(\%conf, 'rsyncd', 'status', $status);
+    if ($status eq'enabled') {
+        db_set_prop(\%conf, 'rsyncd', 'access', 'public');
+    }
+    else {
+        db_set_prop(\%conf, 'rsyncd', 'access', 'private');
+    }
+    
+    
 
     system ("/sbin/e-smith/expand-template /etc/rsyncd.conf") == 0
         or die ("Error occurred :expand-template /etc/rsyncd.conf.\n");
