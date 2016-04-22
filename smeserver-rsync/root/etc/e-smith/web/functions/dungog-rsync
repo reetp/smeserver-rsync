@@ -261,7 +261,7 @@ sub showInitial ($$)
     }
 
     #configure and select set
-    print $q->h4 ('Transfer Sets Summary - Secure');
+    print $q->h4 ('Transfer Sets Summary - Secure -send to remote');
 
     print $q->p ($q->a ({href => $q->url (-absolute => 1) . "?state=modifyrsync&&rsync=new"},
                     'Click here'),
@@ -335,9 +335,11 @@ sub showInitial ($$)
     }
 
     print '</table>';
-
+    
+    print '<br />';
+    
     #configure and select set
-    print $q->h4 ('Transfer Sets Summary - Anonymous [untested]');
+    print $q->h4 ('Transfer Sets Summary - Anonymous retrieve from remote [untested]');
 
     print $q->p ($q->a ({href => $q->url (-absolute => 1) . "?state=showAnon&&rsync=new"},
                    'Click here'),
@@ -410,15 +412,18 @@ sub showInitial ($$)
       }
     }
     print '</table>';
-
+    
+    print '<br />';
+    
     #configure and select set
     print $q->h4 ('Configure your server as an Anonymous Rsync server - Not tested');
 
-    #check to see if e-smith-rsyncd is installed
-#    unless ( -e "/etc/e-smith/events/actions/conf-rsyncd" )
-    my $rsyncd_status = db_get_prop(\%conf, "rsyncd", "status") || 'disabled';
-    unless ($rsyncd_status eq 'enabled')
-
+    # check to see if e-smith-rsyncd is installed
+    # old code - unless ( -e "/etc/e-smith/events/actions/conf-rsyncd" )
+    # use existing rsync key to decide whether the following section can be configured
+    my $rsync_status = db_get_prop(\%conf, "rsync", "status") || 'disabled';
+    
+    unless ($rsync_status eq 'enabled')
     {
       print $q->p (esmith::cgi::genSmallCell ($q, 'NOTE: Not currently working. To make files available for download by
               Anonymous Rsync to you need to install
@@ -611,7 +616,8 @@ sub modifyRsync ($$)
                       "$editlocaldir",),
 
         #remote servers
-        esmith::cgi::genTextRow ($q, $q->p ('<b>Remote user@server</b> user is required. Can be different to local user')));
+        esmith::cgi::genTextRow ($q, $q->p ('<b>Remote user@server</b> user is required. Can be different to local user<br />
+                                            See Help - Changing the port for using different ports')));
 
         print $q->table ({border => 1, cellspacing => 1, cellpadding => 4});
         foreach (sort @remoteserverlist)
@@ -1142,9 +1148,9 @@ sub showIbay ($$)
     {
       #short intro
       print $q->p ($q->p ('<font style color="red">This is not fully functioning currently.</font></br>
-	    Information Bays shown in red have Global Access set to
-           [Entire Internet- no password required], this settings enables Anonymous Rsync access
-           to the <b>ibayname/files</b> directory,<p>
+	         Information Bays shown in red have Global Access set to
+           [Entire Internet- no password required]. This settings enables Anonymous Rsync access
+           to the <b>ibayname/files</b> directory.<p>
            Click modify to toggle the ibays Public Access to
            \'global\' to allow access [shown in red]
            or \'local\' disallow access [shown in black].<p>
@@ -1157,7 +1163,8 @@ sub showIbay ($$)
       {
           print $q->p ($q->p ('This is not fully functioning currently.<br>
                                It requires smeserver-shared-folders to enable rsyncd<br>
-                               Work still required '));
+                               Work still required.
+                               Missing /etc/e-smith/templates/etc/hosts.allow/rsync ??'));
       }
 
       print $q->p ($q->a ({href => $q->url (-absolute => 1) . "?state=recentRsync"},
@@ -1174,8 +1181,8 @@ sub showIbay ($$)
       my $ibay = '';
       foreach $ibay (sort @ibayAccounts)
       {
-	unless ($ibay eq 'Primary')
-	{
+	      unless ($ibay eq 'Primary')
+	      {
           my $name = db_get_prop(\%accounts, "$ibay", 'Name') || '';
           my $PublicAccess = db_get_prop(\%accounts, "$ibay", "PublicAccess") || '';
           my $Group = db_get_prop(\%accounts, "$ibay", "Group") || '';
@@ -1216,7 +1223,8 @@ sub showIbay ($$)
       print '</table>';
     }
 
-    #enable/disable rsyncd
+    # enable/disable rsyncd
+    # This should be changed to rsyncd ?
     print $q->h4 ('Status');
     print $q->p ($q->p ('Disable or enable access to files on your server via Anonymous Rsync'));
 
@@ -1559,9 +1567,9 @@ cd /home/e-smith/files/users/dummy/.ssh
 ssh-keygen -t rsa [accept file name id_rsa][don\'t enter a passphrase]
 ssh dummy@remote-server.net mkdir .ssh
 scp id_rsa.pub dummy@remote-server.net:.ssh/dummy.localserver.pub
- ssh dummy@remote-server.net
- cd .ssh
- cat dummy.localserver.pub >> authorized_keys
+ssh dummy@remote-server.net
+cd .ssh
+cat dummy.localserver.pub >> authorized_keys
 [or for the first key
 scp id_rsa.pub dummy@remote-server.net:.ssh/authorized_keys ]
 
@@ -1671,7 +1679,7 @@ EXCLUDE PATTERNS
        o      if  the pattern contains a / (not counting a trail-
               ing /) then it is matched against  the  full  file-
               name,  including any leading directory. If the pat-
-              tern doesn\´t contain a / then it  is  matched  only
+              tern does not contain a / then it  is  matched  only
               against   the  final  component  of  the  filename.
               Again,  remember  that  the  algorithm  is  applied
               recursively  so "full filename" can actually be any
