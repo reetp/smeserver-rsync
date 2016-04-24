@@ -21,7 +21,7 @@ AutoReqProv: no
 SMEserver rpm for setting up rsync jobs with a server panel
 
 %changelog
-* Thu Apr 21 2016 John Crisp <jcrisp@safeandsoundit.co.uk>
+* Sun Apr 24 2016 John Crisp <jcrisp@safeandsoundit.co.uk>
 - First import to smecontribs
 
 * Thu Jun 8 2006 Stephen Noble <support@dungog.net>
