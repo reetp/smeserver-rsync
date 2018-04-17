@@ -26,6 +26,7 @@ SMEserver rpm for setting up rsync jobs with a server panel
 * Thu Apr 17 2018 John Crisp <jcrisp@safeandsoundit.co.uk>
 - Set default Options to test
 - Fix spelling 'recieve'
+- Set default status to Test
 - Modify wording [SME:9684]
 - [1.3-2]
 

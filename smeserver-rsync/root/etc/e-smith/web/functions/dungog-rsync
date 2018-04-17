@@ -519,7 +519,7 @@ sub modifyRsync ($$)
         esmith::cgi::genWidgetRow ($q, "Options",
                $q->popup_menu (-name    => "options",
                                -values  => ['test','verbose','stats','quiet'],
-                               -default => db_get_prop(\%dungog, $rsync, "options") || 'stats',
+                               -default => db_get_prop(\%dungog, $rsync, "options") || 'test',
                                -labels => \%Labels5)));
 
         my $delete = db_get_prop(\%dungog, $rsync, "delete") || 'no';
