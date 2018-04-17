@@ -80,8 +80,8 @@ my %Labels = ('*' => 'Daily',
 my %Labels2 = ('senddirs' => 'send one or more directories to another server',
                'senddirs2self' => 'save directories to self. eg 2nd hardrive',
                'sendservers' => 'send one directory to many servers',
-               'recievedirs' => 'recieve one or more directories from one server',
-               'recieveservers'  => 'recieve one directory from many servers');
+               'receivedirs' => 'receive one or more directories from one server',
+               'receiveservers'  => 'receive one directory from many servers');
 
 my %Labels5 = ('test'    => 'Test. Only displays what rsync would do and does no actual copying',
                'verbose' => 'Copies but still gives a verbose display of what it is doing',
@@ -512,7 +512,7 @@ sub modifyRsync ($$)
 
         esmith::cgi::genWidgetRow ($q, "Method",
                $q->popup_menu (-name    => "method",
-                               -values  => ['senddirs','sendservers','recievedirs','recieveservers','senddirs2self'],
+                               -values  => ['senddirs','sendservers','receivedirs','receiveservers','senddirs2self'],
                                -default => db_get_prop(\%dungog, $rsync, "method") || '',
                                -labels => \%Labels2)),
 
