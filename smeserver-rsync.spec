@@ -21,7 +21,7 @@ AutoReqProv: no
 SMEserver rpm for setting up rsync jobs with a server panel
 
 %changelog
-* Sun Apr 24 2016 John Crisp <jcrisp@safeandsoundit.co.uk>
+* Thu Apr 21 2016 John Crisp <jcrisp@safeandsounit.co.uk>
 - First import to smecontribs
 
 * Thu Jun 8 2006 Stephen Noble <support@dungog.net>
@@ -88,6 +88,11 @@ rm -rf %{name}-%{version}
 #new installs
 if [ $1 = 1 ] ; then
  /bin/touch /home/e-smith/db/dungog
+
+# DBS=`find /home/e-smith/db/navigation -type f -name "navigation.*"`
+# for db in $DBS ; do
+# 	/sbin/e-smith/db $db set dungog-rsync panel Description "Rsync" DescriptionWeight 4863 Heading "dungog.net" HeadingWeight 4000 2>/dev/null
+# done
 fi
 
 /bin/chmod 644 /etc/crontab
@@ -105,7 +110,14 @@ echo ''
 #uninstalls
 if [ $1 = 0 ] ; then
  /sbin/e-smith/expand-template /etc/crontab
+
  /bin/rm -rf /usr/bin/dungogrsync-?????
+
+# DBS=`find /home/e-smith/db/navigation -type f -name "navigation.*"`
+# for db in $DBS ; do
+#          /sbin/e-smith/db $db delete dungog-rsync  2>/dev/null
+# done
+
 fi
 
 #&upgrades
