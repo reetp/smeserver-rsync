@@ -10,12 +10,14 @@ URL: http://www.contribs.org
 Distribution: SME Server
 Group: SMEServer/addon
 Source: %{name}-%{version}.tar.gz
+Patch1: smeserver-rsync-spelling-update.patch
 Packager: Stephen Noble <stephen@dungog.net>
 BuildRoot: /var/tmp/%{name}-%{version}
 BuildArchitectures: noarch
 BuildRequires: e-smith-devtools
 Requires: e-smith-release >= 9
 AutoReqProv: no
+
 
 %description
 SMEserver rpm for setting up rsync jobs with a server panel
@@ -73,6 +75,8 @@ SMEserver rpm for setting up rsync jobs with a server panel
 
 %prep
 %setup
+
+%patch1 -p1
 
 %build
 perl createlinks
