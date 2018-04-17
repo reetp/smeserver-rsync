@@ -1,6 +1,6 @@
 %define name smeserver-rsync
 %define version 1.3
-%define release 1
+%define release 2
 Summary: SMEserver rpm for rsync
 Name: %{name}
 Version: %{version}
@@ -14,13 +14,19 @@ Packager: Stephen Noble <stephen@dungog.net>
 BuildRoot: /var/tmp/%{name}-%{version}
 BuildArchitectures: noarch
 BuildRequires: e-smith-devtools
-Requires: e-smith-release >= 8
+Requires: e-smith-release >= 9
 AutoReqProv: no
 
 %description
 SMEserver rpm for setting up rsync jobs with a server panel
 
 %changelog
+* Thu Apr 17 2018 John Crisp <jcrisp@safeandsoundit.co.uk>
+- Set default Options to test
+- Fix spelling 'recieve'
+- Modify wording [SME:9684]
+- [1.3-2]
+
 * Thu Apr 21 2016 John Crisp <jcrisp@safeandsounit.co.uk>
 - First import to smecontribs
 
