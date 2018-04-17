@@ -339,7 +339,7 @@ sub showInitial ($$)
     print '<br />';
     
     #configure and select set
-    print $q->h4 ('Transfer Sets Summary - Anonymous rsync retrieve from remote [untested]');
+    print $q->h4 ('Transfer Sets Summary - Anonymous rsync retrieve from remote');
 
     print $q->p ($q->a ({href => $q->url (-absolute => 1) . "?state=showAnon&&rsync=new"},
                    'Click here'),
@@ -416,7 +416,7 @@ sub showInitial ($$)
     print '<br />';
     
     #configure and select set
-    print $q->h4 ('Configure your server as an Anonymous Rsync server - Not tested');
+    print $q->h4 ('Configure your server as an Anonymous Rsync server');
 
     # check to see if e-smith-rsyncd is installed
     # old code - unless ( -e "/etc/e-smith/events/actions/conf-rsyncd" )
@@ -426,7 +426,7 @@ sub showInitial ($$)
     
     unless ($rsyncd_status ne '')
     {
-      print $q->p (esmith::cgi::genSmallCell ($q, 'NOTE: Not currently working. To make files available for download by
+      print $q->p (esmith::cgi::genSmallCell ($q, 'To make files available for download by
               Anonymous Rsync to you need to install
               smeserver-shared-folders, see help below'));
     }
