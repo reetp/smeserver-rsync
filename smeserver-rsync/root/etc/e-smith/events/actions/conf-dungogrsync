@@ -153,7 +153,7 @@ die "rsync argument missing." unless defined ($rsync);
 
       # this server sends [directories to a server]\n";
       print RUN "    echo ''\n";
-      print RUN "    echo 'Sending $_ to $remoteserver.'\n";
+      print RUN "    echo 'Sending $_ to $remoteserver'\n";
       print RUN "    /usr/bin/rsync $OPTS -e \"ssh -p $remoteport\" $_ $remoteserver:$remotedir\n";
       print RUN "\n";
 
