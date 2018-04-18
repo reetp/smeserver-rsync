@@ -16,9 +16,9 @@ use CGI ':all';
 use CGI::Carp qw(fatalsToBrowser);
 
 use esmith::cgi;
-use esmith::config;
+use esmith::config; # This can probably come out
 use esmith::util;
-use esmith::db;
+use esmith::db; # This can probably come out
 
 sub showInitial ($$);                       # main form
 sub showHelp ($);
@@ -57,14 +57,17 @@ esmith::util::setRealToEffective ();
 $CGI::POST_MAX=1024 * 100;  # max 100K posts
 $CGI::DISABLE_UPLOADS = 1;  # no uploads
 
-my %conf;
-tie %conf, 'esmith::config';
+# my %conf;
+# tie %conf, 'esmith::config';
+# my %dungog;
+# tie %dungog, 'esmith::config', '/home/e-smith/db/dungog';
+# my %accounts;
+# tie %accounts, 'esmith::config', '/home/e-smith/db/accounts';
 
-my %dungog;
-tie %dungog, 'esmith::config', '/home/e-smith/db/dungog';
-
-my %accounts;
-tie %accounts, 'esmith::config', '/home/e-smith/db/accounts';
+use esmith::ConfigDB;
+my $config = esmith::ConfigDB->open or die ("Can't open config DB");
+my $dungog = esmith::ConfigDB->open ('dungog') or die ("Can't open dungog DB");
+my $accounts = esmith::ConfigDB->open ('accounts') or die ("Can't open accounts DB");
 
 my %Labels = ('*' => 'Daily',
               '1-5' => 'Week days',
@@ -232,12 +235,12 @@ sub showInitial ($$)
     if ($msg eq '')
     {
           esmith::cgi::genHeaderNonCacheable
-            ($q, \%conf, 'Rsync file transfer');
+            ($q, \%conf, 'Rsync file transfer'); # Here's one
     }
     else
     {
         esmith::cgi::genHeaderNonCacheable
-            ($q, \%conf, 'Rsync file transfer');
+            ($q, \%conf, 'Rsync file transfer');  # Here's one
 
         print $q->h4 ('Operation status report');
         print $q->p ($msg);
@@ -281,17 +284,23 @@ sub showInitial ($$)
     foreach (sort keys %dungog)
     {
         push (@rsyncs, $_)
-        if (db_get_type(\%dungog, $_) eq "rsync");
+        if (db_get_type(\%dungog, $_) eq "rsync"); # Here's one
     }
 
     my $rsync = '';
     foreach $rsync (sort @rsyncs)
     {
-        my $desc    = db_get_prop(\%dungog, $rsync, "desc")    || '';
-        my $freq    = db_get_prop(\%dungog, $rsync, "freq")    || '';
-        my $day     = db_get_prop(\%dungog, $rsync, "day")     || '';
-        my $hour    = db_get_prop(\%dungog, $rsync, "hour")    || '';
-        my $min     = db_get_prop(\%dungog, $rsync, "min")     || '';
+      #my $desc    = db_get_prop(\%dungog, $rsync, "desc")    || '';
+      my $desc    = $dungog->getprop($rsync, 'desc') || '';
+      #my $freq    = db_get_prop(\%dungog, $rsync, "freq")    || '';
+      my $freq    = $dungog->getprop($rsync, 'freq') || '';
+      #my $day     = db_get_prop(\%dungog, $rsync, "day")     || '';
+      my $day     = $dungog->getprop($rsync, 'day') || '';
+      #my $hour    = db_get_prop(\%dungog, $rsync, "hour")    || '';
+      my $hour    = $dungog->getprop($rsync, 'hour') || '';
+      #my $min     = db_get_prop(\%dungog, $rsync, "min")     || '';
+      my $min     = $dungog->getprop($rsync, 'min') || '';
+
 
         #modify frequency value for display
         my $daylabel = ($Labels{$day});
@@ -359,17 +368,23 @@ sub showInitial ($$)
     foreach (sort keys %dungog)
     {
       push (@rsyncAnon, $_)
-      if (db_get_type(\%dungog, $_) eq "rsyncAnon");
+      # if (db_get_type(\%dungog, $_) eq "rsyncAnon");
+      if ($dungog->get ($_) ) eq "rsyncAnon");
     }
 
     $rsync = '';
     foreach $rsync (sort @rsyncAnon)
     {
-      my $desc    = db_get_prop(\%dungog, $rsync, "desc")    || '';
-      my $freq    = db_get_prop(\%dungog, $rsync, "freq")    || '';
-      my $day     = db_get_prop(\%dungog, $rsync, "day")     || '';
-      my $hour    = db_get_prop(\%dungog, $rsync, "hour")    || '';
-      my $min     = db_get_prop(\%dungog, $rsync, "min")     || '';
+      #my $desc    = db_get_prop(\%dungog, $rsync, "desc")    || '';
+      my $desc    = $dungog->getprop($rsync, 'desc') || '';
+      #my $freq    = db_get_prop(\%dungog, $rsync, "freq")    || '';
+      my $freq    = $dungog->getprop($rsync, 'freq') || '';
+      #my $day     = db_get_prop(\%dungog, $rsync, "day")     || '';
+      my $day     = $dungog->getprop($rsync, 'day') || '';
+      #my $hour    = db_get_prop(\%dungog, $rsync, "hour")    || '';
+      my $hour    = $dungog->getprop($rsync, 'hour') || '';
+      #my $min     = db_get_prop(\%dungog, $rsync, "min")     || '';
+      my $min     = $dungog->getprop($rsync, 'min') || '';
 
       #modify frequency value for display
       my $daylabel = ($Labels{$day});
