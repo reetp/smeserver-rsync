@@ -422,7 +422,7 @@ sub showInitial ($$)
     # old code - unless ( -e "/etc/e-smith/events/actions/conf-rsyncd" )
     # use existing rsync key to decide whether the following section can be configured
     # test for rsyncd property
-    my $rsyncd_status = db_get(\%conf, "rsyncd");
+    my $rsyncd_status = db_get(\%conf, "rsyncd") || '';
     
     unless ($rsyncd_status ne '')
     {
@@ -508,7 +508,7 @@ sub modifyRsync ($$)
         esmith::cgi::genWidgetRow ($q, "Select a user for rsync to run as",
                $q->popup_menu (-name    => "user",
                                -values  => [ sort @userlist , 'root' ],
-                               -default => db_get_prop(\%dungog, $rsync, "user") || '')),
+                               -default => db_get_prop(\%dungog, $rsync, "user") || 'root')),
 
         esmith::cgi::genWidgetRow ($q, "Method",
                $q->popup_menu (-name    => "method",
