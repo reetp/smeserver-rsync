@@ -2,8 +2,11 @@
   use esmith::config;
   use esmith::db;
 
-  local %dungog;
-  tie %dungog, 'esmith::config', '/home/e-smith/db/dungog';
+#  local %dungog;
+#  tie %dungog, 'esmith::config', '/home/e-smith/db/dungog';
+
+  my $dungog = esmith::ConfigDB->open ('dungog') or die ("Can't open dungog DB");
+  my %dungog = $dungog->props;
 
   $OUT = "\n";
 
@@ -26,14 +29,21 @@
     my $rsync;
     foreach $rsync (sort @all)
     {
-      my $user    = db_get_prop(\%dungog, $rsync, "user")    || 'root';
-      my $freq    = db_get_prop(\%dungog, $rsync, "freq")    || '';
-      my $day     = db_get_prop(\%dungog, $rsync, "day")     || 'tue';
-      my $hour    = db_get_prop(\%dungog, $rsync, "hour")    || '3';
-      my $min     = db_get_prop(\%dungog, $rsync, "min")     || '30';
-      my $desc    = db_get_prop(\%dungog, $rsync, "desc")    || '';
-      my $mail    = db_get_prop(\%dungog, $rsync, "mail")    || '';
-
+      #my $user    = db_get_prop(\%dungog, $rsync, "user")    || 'root';
+      my $user     = $dungog->get_prop($rsync, 'user') || 'root';
+      #my $freq    = db_get_prop(\%dungog, $rsync, "freq")    || '';
+      my $freq    = $dungog->get_prop($rsync, 'freq') || '';
+      #my $day     = db_get_prop(\%dungog, $rsync, "day")     || 'tue';
+      my $day     = $dungog->get_prop($rsync, 'day') || 'tue';
+      #my $hour    = db_get_prop(\%dungog, $rsync, "hour")    || '3';
+      my $hour    = $dungog->get_prop($rsync, 'hour') || '3';      
+      #my $min     = db_get_prop(\%dungog, $rsync, "min")     || '30';
+      my $min     = $dungog->get_prop($rsync, 'min') || '30';      
+      #my $desc    = db_get_prop(\%dungog, $rsync, "desc")    || '';
+      my $desc    = $dungog->get_prop($rsync, 'desc') || '';
+      #my $mail    = db_get_prop(\%dungog, $rsync, "mail")    || '';
+      my $mail     = $dungog->get_prop($rsync, 'mail') || '';
+      
       #unless email is on, delete output
       unless ($mail eq 'on')
       {
