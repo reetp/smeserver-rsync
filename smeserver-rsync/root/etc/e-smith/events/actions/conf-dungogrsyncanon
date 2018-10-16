@@ -11,76 +11,84 @@ use esmith::config;
 use esmith::util;
 use esmith::db;
 
-my %conf;
-tie %conf, 'esmith::config';
+#my %conf;
+#tie %conf, 'esmith::config';
+#
+#local %dungog;
+#tie %dungog, 'esmith::config', '/home/e-smith/db/dungog';
 
-local %dungog;
-tie %dungog, 'esmith::config', '/home/e-smith/db/dungog';
+#my %conf;
+#tie %conf, 'esmith::config';
+#
+use esmith::ConfigDB;
+my $config = esmith::ConfigDB->open or die("Can't open config DB");
+my %conf = $config->props;
 
-my $rsync = $ARGV [1];
-die "rsync argument missing." unless defined ($rsync);
+#my %dungog;
+#tie %dungog, 'esmith::config', '/home/e-smith/db/dungog';
+#
+my $dungog = esmith::ConfigDB->open('dungog') or die("Can't open dungog DB");
+my %dungog = $dungog->props;
 
-  unlink ("/usr/bin/dungogrsync-$rsync");
+my $rsync = $ARGV[1];
+die "rsync argument missing." unless defined($rsync);
 
-  #define some variables
-  my $method            = db_get_prop(\%dungog, $rsync, "method")  || '';
-  my $options           = db_get_prop(\%dungog, $rsync, "options") || '';
-  my $compress          = db_get_prop(\%dungog, $rsync, "compress")|| '';
+unlink("/usr/bin/dungogrsync-$rsync");
 
-  my $localdir          = db_get_prop(\%dungog, $rsync, "localdir")     || 'none';
-  my $remoteserver      = db_get_prop(\%dungog, $rsync, "remoteserver") || 'none';
+#define some variables
+my $method   = $dungog->get_prop( $rsync, "method" )   || '';
+my $options  = $dungog->get_prop( $rsync, "options" )  || '';
+my $compress = $dungog->get_prop( $rsync, "compress" ) || '';
 
-  my $OPTS              = '$OPTS';
-  my $VAR               = '$VAR';
-  my $C                 = '';
-  my $D                 = '';
+my $localdir     = $dungog->get_prop( $rsync, "localdir" )     || 'none';
+my $remoteserver = $dungog->get_prop( $rsync, "remoteserver" ) || 'none';
 
-  #create rsync set script /usr/bin/dungogrsync-$rsync
-  open (RUN, ">/usr/bin/dungogrsync-$rsync") || die ("Can't open /usr/bin/dungogrsync-$rsync: $!");
+my $OPTS = '$OPTS';
+my $VAR  = '$VAR';
+my $C    = '';
+my $D    = '';
 
-  # can run from cron on a MITELsme server
-  # typical use, mirrors an ibay from the source server
+#create rsync set script /usr/bin/dungogrsync-$rsync
+open( RUN, ">/usr/bin/dungogrsync-$rsync" ) || die("Can't open /usr/bin/dungogrsync-$rsync: $!");
 
-  print RUN "#!/bin/bash\n";
-  print RUN "\n";
-  print RUN "# rsync 'driver' script.  (Uses anonymous rsync.)\n";
-  print RUN "\n";
+# can run from cron on a MITELsme server
+# typical use, mirrors an ibay from the source server
 
-  if ($compress eq 'on')
-  {
+print RUN "#!/bin/bash\n";
+print RUN "\n";
+print RUN "# rsync 'driver' script.  (Uses anonymous rsync.)\n";
+print RUN "\n";
+
+if ( $compress eq 'on' ) {
     $C = '--compress';
-  }
+}
 
-  if ($options eq 'test')
-  {
+if ( $options eq 'test' ) {
     print RUN "# For testing.  Only displays what rsync 'would' do and does no actual copying.\n";
     print RUN "OPTS='-n -vv -u -a $C --stats --progress'\n";
-  }
-  elsif ($options eq 'verbose')
-  {
+}
+elsif ( $options eq 'verbose' ) {
     print RUN "# Does copy, but still gives a verbose display of what it is doing.\n";
     print RUN "OPTS='-v -u -a $C --stats --progress'\n";
-  }
-  elsif ($options eq 'stats')
-  {
+}
+elsif ( $options eq 'stats' ) {
     print RUN "# Does copy, not so verbose.\n";
     print RUN "OPTS='-u -a $C --stats'\n";
-  }
-  elsif ($options eq 'quiet')
-  {
+}
+elsif ( $options eq 'quiet' ) {
     print RUN "# Copies and does no display at all.\n";
     print RUN "OPTS='-u -a $C --quiet'\n";
-  }
+}
 
-  print RUN "\n";
-  print RUN "  echo 'Begin rsync transfer from $remoteserver to $localdir.'\n";
-  print RUN "\n";
-  print RUN "  /usr/bin/rsync $OPTS $remoteserver $localdir\n";
-  print RUN "\n";
-  print RUN "  echo 'Ending rsync transfer.'\n";
-  print RUN "\n";
+print RUN "\n";
+print RUN "  echo 'Begin rsync transfer from $remoteserver to $localdir.'\n";
+print RUN "\n";
+print RUN "  /usr/bin/rsync $OPTS $remoteserver $localdir\n";
+print RUN "\n";
+print RUN "  echo 'Ending rsync transfer.'\n";
+print RUN "\n";
 
-  close RUN;
-  chmod 0755, "/usr/bin/dungogrsync-$rsync";
+close RUN;
+chmod 0755, "/usr/bin/dungogrsync-$rsync";
 
-exit (0);
+exit(0);

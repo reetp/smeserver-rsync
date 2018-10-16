@@ -13,19 +13,40 @@ use esmith::config;
 use esmith::util;
 use esmith::db;
 
-my %conf;
-tie %conf, 'esmith::config';
+#my %conf;
+#tie %conf, 'esmith::config';
 
 #local %dungog;
 #tie %dungog, 'esmith::config', '/home/e-smith/db/dungog';
 
-my $event = $ARGV [0];
-my $rsync = $ARGV [1];
-my $user  = $ARGV [2];
-die "rsync argument missing." unless defined ($rsync);
-die "user argument missing." unless defined ($user);
+#my %conf;
+#tie %conf, 'esmith::config';
+#
 
-      system("/bin/su -c /usr/bin/dungogrsync-$rsync $user 2> /var/log/dungogrsyncnow 1> /var/log/dungogrsyncnow") == 0
-        or die ("Error occurred while running rsync.\n");
+# Following may not be required
+use esmith::ConfigDB;
+my $config = esmith::ConfigDB->open or die("Can't open config DB");
+my %conf = $config->props;
 
-exit (0)
+#my %dungog;
+#tie %dungog, 'esmith::config', '/home/e-smith/db/dungog';
+#
+my $dungog = esmith::ConfigDB->open('dungog') or die("Can't open dungog DB");
+my %dungog = $dungog->props;
+
+#my %accounts;
+#tie %accounts, 'esmith::config', '/home/e-smith/db/accounts';
+
+my $accounts = esmith::ConfigDB->open('accounts') or die("Can't open accounts DB");
+my %accounts = $accounts->props;
+
+my $event = $ARGV[0];
+my $rsync = $ARGV[1];
+my $user  = $ARGV[2];
+die "rsync argument missing." unless defined($rsync);
+die "user argument missing."  unless defined($user);
+
+system("/bin/su -c /usr/bin/dungogrsync-$rsync $user 2> /var/log/dungogrsyncnow 1> /var/log/dungogrsyncnow") == 0
+    or die("Error occurred while running rsync.\n");
+
+exit(0)
